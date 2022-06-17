@@ -6,11 +6,14 @@ use anyhow::{Result, Error, anyhow};
 use iced::window::Icon;
 use iced::{Settings, PickList, pick_list, Application, executor, Command, Clipboard, Column, Text, Checkbox, Length, Row, Align, Rule, TextInput, text_input, Button, button, ProgressBar, HorizontalAlignment, Element};
 use native_dialog::FileDialog;
+use png::Transformations;
 
+use crate::Args;
 use crate::installer::{Installation, ClientInstallation, fetch_minecraft_versions, fetch_loader_versions, LoaderVersion, MinecraftVersion, install_client, ServerInstallation, install_server};
 
-pub fn run() -> Result<()> {
+pub fn run(args: Args) -> Result<()> {
     let mut setttings = Settings::default();
+    setttings.flags = args;
     setttings.window.size = (600, 300);
     setttings.window.resizable = false;
     setttings.window.icon = Some(create_icon()?);
@@ -21,7 +24,9 @@ pub fn run() -> Result<()> {
 
 
 fn create_icon() -> Result<Icon> {
-    let mut reader = png::Decoder::new(crate::ICON).read_info()?;
+    let mut decoder = png::Decoder::new(crate::ICON);
+    decoder.set_transformations(Transformations::EXPAND);
+    let mut reader = decoder.read_info()?;
     let mut buffer = vec![0; reader.output_buffer_size()];
     let info = reader.next_frame(&mut buffer)?;
     let bytes = &buffer[..info.buffer_size()];
@@ -145,9 +150,9 @@ fn get_default_client_directory() -> PathBuf {
 impl Application for State {
     type Message = Message;
     type Executor = executor::Default;
-    type Flags = ();
+    type Flags = Args;
 
-    fn new(_flags: Self::Flags) -> (Self, Command<Self::Message>) {
+    fn new(_args: Args) -> (Self, Command<Self::Message>) {
         (
             State{
                 client_location: get_default_client_directory(),
