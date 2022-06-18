@@ -132,7 +132,7 @@ fn get_default_client_directory() -> PathBuf {
 }
 
 #[cfg(target_os = "macos")]
-fn get_default_client_directory() {
+fn get_default_client_directory() -> PathBuf {
     let mut dir = PathBuf::from(std::env::var("HOME").unwrap());
     dir.push("Library");
     dir.push("Application Support");
