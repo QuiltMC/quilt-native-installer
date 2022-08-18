@@ -108,7 +108,18 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
 
     // Download launch json
     let response = reqwest::get(format!("https://meta.quiltmc.org/v3/versions/loader/{}/{}/profile/json", &args.minecraft_version.version, &args.loader_version.version)).await?.text().await?;
+
+    // Hack-Fix:
+    // Quilt-meta specifies both hashed and intermediary, but providing both to quilt-loader causes it to silently fail remapping.
+    // This really shouldn't be fixed here in the installer, but we need a solution now.
+    let mut json: serde_json::Value = serde_json::from_str(&response).unwrap();
+    let libs = json.as_object_mut().unwrap().get_mut("libraries").unwrap().as_array_mut().unwrap();
+    libs.retain(|lib| !lib.as_object().unwrap().get("name").unwrap().as_str().unwrap().starts_with("org.quiltmc:hashed"));
+    let response = serde_json::to_string(&json).unwrap();
+    // End of hack-fix
+
     std::io::copy(&mut response.as_bytes(), &mut file)?;
+
 
     // Generate profile
     if args.generate_profile {
