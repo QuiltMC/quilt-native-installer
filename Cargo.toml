@@ -10,18 +10,18 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0"
-async-trait = "0.1"
-base64 = "0.13"
-chrono = "0.4"
-clap = { version = "3.2", features = ["derive"] }
-iced = { version = "0.3", default-features = false, features = ["glow", "tokio"] }
-iced_glow = "0.2"
+anyhow = "1.0.65"
+async-trait = "0.1.57"
+base64 = "0.13.0"
+chrono = "0.4.22"
+clap = { version = "4.0.15", features = ["derive"] }
+iced = { version = "0.3.0", default-features = false, features = ["glow", "tokio"] }
+iced_glow = "0.3.0"
 native-dialog = "0.6.3"
-png = "0.17.5"
-reqwest = { version = "0.11", features = ["blocking", "json"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+png = "0.17.6"
+reqwest = { version = "0.11.12", features = ["blocking", "json"] }
+serde = { version = "1.0.145", features = ["derive"] }
+serde_json = "1.0.86"
 
 [profile.release]
 strip = true

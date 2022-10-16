@@ -9,7 +9,7 @@ env:
 
 jobs:
   release-linux:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
     steps:
     - name: Checkout
       uses: actions/checkout@v3
@@ -25,7 +25,7 @@ jobs:
         asset_name: quilt-installer-linux
         asset_content_type: application/octet-stream
   release-windows:
-    runs-on: windows-2019
+    runs-on: windows-2022
     steps:
     - name: Checkout
       uses: actions/checkout@v3
@@ -41,7 +41,7 @@ jobs:
         asset_name: quilt-installer-windows.exe
         asset_content_type: application/octet-stream
   release-mac:
-    runs-on: macos-11
+    runs-on: macos-12
     steps:
     - name: Checkout
       uses: actions/checkout@v3
