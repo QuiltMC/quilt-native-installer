@@ -19,12 +19,16 @@ use crate::installer::{
 use crate::Args;
 
 pub fn run(args: Args) -> Result<()> {
-    let mut setttings = Settings::default();
-    setttings.flags = args;
-    setttings.window.size = (600, 300);
-    setttings.window.resizable = false;
-    setttings.window.icon = Some(create_icon()?);
-    State::run(setttings)?;
+    State::run(Settings {
+        flags: args,
+        window: iced::window::Settings {
+            size: (600, 300),
+            resizable: false,
+            icon: Some(create_icon()?),
+            ..Default::default()
+        },
+        ..Default::default()
+    })?;
 
     Ok(())
 }
@@ -203,6 +207,7 @@ impl Application for State {
                 Interaction::BrowseServerLocation => return Message::BrowseServerLocation.into(),
                 Interaction::DownloadServerJar(value) => self.download_server_jar = value,
             },
+
             Message::SetMcVersions(result) => {
                 match result {
                     Ok(versions) => self.minecraft_versions = versions,
@@ -263,7 +268,8 @@ impl Application for State {
                 match self.selected_installation {
                     Installation::Client => {
                         if self.selected_minecraft_version.is_none() {
-                            return Message::Error(anyhow!("No Minecraft version selected!")).into();
+                            return Message::Error(anyhow!("No Minecraft version selected!"))
+                                .into();
                         }
 
                         if self.selected_loader_version.is_none() {
@@ -282,7 +288,8 @@ impl Application for State {
                     }
                     Installation::Server => {
                         if self.selected_minecraft_version.is_none() {
-                            return Message::Error(anyhow!("No Minecraft version selected!")).into();
+                            return Message::Error(anyhow!("No Minecraft version selected!"))
+                                .into();
                         }
 
                         if self.selected_loader_version.is_none() {
