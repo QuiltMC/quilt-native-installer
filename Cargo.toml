@@ -14,7 +14,7 @@ anyhow = "1.0"
 async-trait = "0.1"
 base64 = "0.13"
 chrono = "0.4"
-clap = { version = "3.2", features = ["derive"] }
+clap = { version = "4.0.17", features = ["derive"] }
 iced = { version = "0.3", default-features = false, features = ["glow", "tokio"] }
 iced_glow = "0.2"
 native-dialog = "0.6.3"
