@@ -196,7 +196,7 @@ impl Application for State {
                     Err(error) => return Message::Error(error).into(),
                 }
                 if self.selected_minecraft_version.is_none() {
-                    self.selected_minecraft_version = self.minecraft_versions.iter().filter(|v| v.stable).next().cloned();
+                    self.selected_minecraft_version = self.minecraft_versions.iter().find(|v| v.stable).cloned();
                 }
             },
             Message::SetLoaderVersions(result) => {
@@ -205,7 +205,7 @@ impl Application for State {
                     Err(error) => return Message::Error(error).into(),
                 }
                 if self.selected_loader_version.is_none() {
-                    self.selected_loader_version = self.loader_versions.iter().filter(|v| !v.version.contains("beta")).next().cloned();
+                    self.selected_loader_version = self.loader_versions.iter().find(|v| !v.version.contains("beta")).cloned();
                 }
             },
             Message::BrowseClientLocation => {

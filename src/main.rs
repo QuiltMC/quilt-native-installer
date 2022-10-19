@@ -6,7 +6,7 @@ use clap::Parser;
 mod gui;
 mod installer;
 
-const ICON: &'static [u8] = include_bytes!("../quilt.png");
+const ICON: &[u8] = include_bytes!("../quilt.png");
 
 #[derive(Default, Parser)]
 #[clap(about, version)]
