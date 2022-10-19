@@ -125,9 +125,9 @@ enum Interaction {
     DownloadServerJar(bool),
 }
 
-impl Into<Command<Message>> for Message {
-    fn into(self) -> Command<Message> {
-        async { self }.into()
+impl From<Message> for Command<Message> {
+    fn from(message: Message) -> Self {
+        async { message }.into()
     }
 }
 
