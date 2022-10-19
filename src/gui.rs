@@ -1,15 +1,22 @@
 use std::borrow::Cow;
-use std::fmt::{Display, Debug};
+use std::fmt::{Debug, Display};
 use std::path::PathBuf;
 
-use anyhow::{Result, Error, anyhow};
+use anyhow::{anyhow, Error, Result};
 use iced::window::Icon;
-use iced::{Settings, PickList, pick_list, Application, executor, Command, Clipboard, Column, Text, Checkbox, Length, Row, Align, Rule, TextInput, text_input, Button, button, ProgressBar, HorizontalAlignment, Element};
+use iced::{
+    button, executor, pick_list, text_input, Align, Application, Button, Checkbox, Clipboard,
+    Column, Command, Element, HorizontalAlignment, Length, PickList, ProgressBar, Row, Rule,
+    Settings, Text, TextInput,
+};
 use native_dialog::FileDialog;
 use png::Transformations;
 
+use crate::installer::{
+    fetch_loader_versions, fetch_minecraft_versions, install_client, install_server,
+    ClientInstallation, Installation, LoaderVersion, MinecraftVersion, ServerInstallation,
+};
 use crate::Args;
-use crate::installer::{Installation, ClientInstallation, fetch_minecraft_versions, fetch_loader_versions, LoaderVersion, MinecraftVersion, install_client, ServerInstallation, install_server};
 
 pub fn run(args: Args) -> Result<()> {
     let mut setttings = Settings::default();
@@ -18,10 +25,9 @@ pub fn run(args: Args) -> Result<()> {
     setttings.window.resizable = false;
     setttings.window.icon = Some(create_icon()?);
     State::run(setttings)?;
-    
+
     Ok(())
 }
-
 
 fn create_icon() -> Result<Icon> {
     let mut decoder = png::Decoder::new(crate::ICON);
@@ -53,7 +59,7 @@ struct State {
     client_location: PathBuf,
     client_location_browse: button::State,
     generate_profile: bool,
-    
+
     server_location_input: text_input::State,
     server_location: PathBuf,
     server_location_browse: button::State,
@@ -65,7 +71,6 @@ struct State {
 
     progress: f32,
 }
-
 
 impl Installation {
     const ALL: &'static [Installation] = &[Self::Client, Self::Server];
@@ -118,9 +123,7 @@ enum Interaction {
 
 impl Into<Command<Message>> for Message {
     fn into(self) -> Command<Message> {
-        async {
-            self
-        }.into()
+        async { self }.into()
     }
 }
 
@@ -154,7 +157,7 @@ impl Application for State {
 
     fn new(_args: Args) -> (Self, Command<Self::Message>) {
         (
-            State{
+            State {
                 client_location: get_default_client_directory(),
                 generate_profile: true,
                 server_location: std::env::current_dir().unwrap_or_default(),
@@ -165,7 +168,7 @@ impl Application for State {
             Command::batch([
                 Command::perform(fetch_minecraft_versions(), Message::SetMcVersions),
                 Command::perform(fetch_loader_versions(), Message::SetLoaderVersions),
-            ])
+            ]),
         )
     }
 
@@ -173,15 +176,25 @@ impl Application for State {
         "Quilt Installer".to_owned()
     }
 
-    fn update(&mut self, message: Self::Message, _clipboard: &mut Clipboard) -> Command<Self::Message> {
+    fn update(
+        &mut self,
+        message: Self::Message,
+        _clipboard: &mut Clipboard,
+    ) -> Command<Self::Message> {
         match message {
             Message::Interaction(interaction) => match interaction {
                 Interaction::ChangeClientLocation(location) => self.client_location = location,
                 Interaction::BrowseClientLocation => return Message::BrowseClientLocation.into(),
                 Interaction::Install => return Message::Install.into(),
-                Interaction::SelectInstallation(installation) => self.selected_installation = installation,
-                Interaction::SelectLoaderVersion(version) => self.selected_loader_version = Some(version),
-                Interaction::SelectMcVersion(version) => self.selected_minecraft_version = Some(version),
+                Interaction::SelectInstallation(installation) => {
+                    self.selected_installation = installation
+                }
+                Interaction::SelectLoaderVersion(version) => {
+                    self.selected_loader_version = Some(version)
+                }
+                Interaction::SelectMcVersion(version) => {
+                    self.selected_minecraft_version = Some(version)
+                }
                 Interaction::EnableSnapshots(enable) => self.show_snapshots = enable,
                 Interaction::EnableBetas(enable) => self.show_betas = enable,
                 Interaction::GenerateLaunchScript(value) => self.generate_launch_script = value,
@@ -196,18 +209,23 @@ impl Application for State {
                     Err(error) => return Message::Error(error).into(),
                 }
                 if self.selected_minecraft_version.is_none() {
-                    self.selected_minecraft_version = self.minecraft_versions.iter().find(|v| v.stable).cloned();
+                    self.selected_minecraft_version =
+                        self.minecraft_versions.iter().find(|v| v.stable).cloned();
                 }
-            },
+            }
             Message::SetLoaderVersions(result) => {
                 match result {
                     Ok(versions) => self.loader_versions = versions,
                     Err(error) => return Message::Error(error).into(),
                 }
                 if self.selected_loader_version.is_none() {
-                    self.selected_loader_version = self.loader_versions.iter().find(|v| !v.version.contains("beta")).cloned();
+                    self.selected_loader_version = self
+                        .loader_versions
+                        .iter()
+                        .find(|v| !v.version.contains("beta"))
+                        .cloned();
                 }
-            },
+            }
             Message::BrowseClientLocation => {
                 let mut dialog = FileDialog::new();
                 let working_dir = std::env::current_dir();
@@ -222,7 +240,7 @@ impl Application for State {
                     Ok(None) => (),
                     Err(error) => return Message::Error(error.into()).into(),
                 }
-            },
+            }
             Message::BrowseServerLocation => {
                 let mut dialog = FileDialog::new();
                 let working_dir = std::env::current_dir();
@@ -237,39 +255,38 @@ impl Application for State {
                     Ok(None) => (),
                     Err(error) => return Message::Error(error.into()).into(),
                 }
-            },
+            }
             Message::Install => {
                 self.is_installing = true;
                 self.progress = 0.0;
 
                 match self.selected_installation {
                     Installation::Client => {
-                        
                         if self.selected_minecraft_version.is_none() {
-                            return Message::Error(anyhow!("No Minecraft version selected!")).into()
+                            return Message::Error(anyhow!("No Minecraft version selected!")).into();
                         }
-                        
+
                         if self.selected_loader_version.is_none() {
-                            return Message::Error(anyhow!("No Loader version selected!")).into()
+                            return Message::Error(anyhow!("No Loader version selected!")).into();
                         }
 
                         return Command::perform(
-                            install_client(ClientInstallation{
+                            install_client(ClientInstallation {
                                 minecraft_version: self.selected_minecraft_version.clone().unwrap(),
                                 loader_version: self.selected_loader_version.clone().unwrap(),
                                 install_location: self.client_location.clone(),
-                                generate_profile: self.generate_profile
+                                generate_profile: self.generate_profile,
                             }),
-                            Message::DoneInstalling
+                            Message::DoneInstalling,
                         );
-                    },
+                    }
                     Installation::Server => {
                         if self.selected_minecraft_version.is_none() {
-                            return Message::Error(anyhow!("No Minecraft version selected!")).into()
+                            return Message::Error(anyhow!("No Minecraft version selected!")).into();
                         }
-                        
+
                         if self.selected_loader_version.is_none() {
-                            return Message::Error(anyhow!("No Loader version selected!")).into()
+                            return Message::Error(anyhow!("No Loader version selected!")).into();
                         }
 
                         return Command::perform(
@@ -280,9 +297,9 @@ impl Application for State {
                                 download_jar: self.download_server_jar,
                                 generate_script: self.generate_launch_script,
                             }),
-                            Message::DoneInstalling
+                            Message::DoneInstalling,
                         );
-                    },
+                    }
                 }
             }
             Message::DoneInstalling(res) => {
@@ -308,8 +325,9 @@ impl Application for State {
             &mut self.installation_pick_list,
             Installation::ALL,
             Some(self.selected_installation),
-            Interaction::SelectInstallation
-        ).width(Length::Fill);
+            Interaction::SelectInstallation,
+        )
+        .width(Length::Fill);
         let installation_row = Row::new()
             .push(installation_label)
             .push(installation_list)
@@ -318,15 +336,24 @@ impl Application for State {
             .spacing(5)
             .padding(5);
 
-
         let minecraft_version_label = Text::new("Minecraft version:").width(Length::Units(140));
         let minecraft_version_list = PickList::new(
             &mut self.minecraft_pick_list,
-            Cow::from_iter(self.minecraft_versions.iter().filter(|v| self.show_snapshots || v.stable).cloned()),
+            Cow::from_iter(
+                self.minecraft_versions
+                    .iter()
+                    .filter(|v| self.show_snapshots || v.stable)
+                    .cloned(),
+            ),
             self.selected_minecraft_version.clone(),
-            Interaction::SelectMcVersion
-        ).width(Length::Fill);
-        let enable_snapshots = Checkbox::new(self.show_snapshots, "Show snapshots", Interaction::EnableSnapshots);
+            Interaction::SelectMcVersion,
+        )
+        .width(Length::Fill);
+        let enable_snapshots = Checkbox::new(
+            self.show_snapshots,
+            "Show snapshots",
+            Interaction::EnableSnapshots,
+        );
         let mc_row = Row::new()
             .push(minecraft_version_label)
             .push(minecraft_version_list)
@@ -336,14 +363,19 @@ impl Application for State {
             .spacing(5)
             .padding(5);
 
-            
         let loader_version_label = Text::new("Loader version:").width(Length::Units(140));
         let loader_version_list = PickList::new(
             &mut self.loader_pick_list,
-            Cow::from_iter(self.loader_versions.iter().filter(|v| self.show_betas || !v.version.contains("beta")).cloned()),
+            Cow::from_iter(
+                self.loader_versions
+                    .iter()
+                    .filter(|v| self.show_betas || !v.version.contains("beta"))
+                    .cloned(),
+            ),
             self.selected_loader_version.clone(),
-            Interaction::SelectLoaderVersion
-        ).width(Length::Fill);
+            Interaction::SelectLoaderVersion,
+        )
+        .width(Length::Fill);
         let enable_betas = Checkbox::new(self.show_betas, "Show betas", Interaction::EnableBetas);
         let loader_row = Row::new()
             .push(loader_version_label)
@@ -359,9 +391,12 @@ impl Application for State {
             &mut self.client_location_input,
             "Install location",
             self.client_location.to_str().unwrap(),
-            |s| Interaction::ChangeClientLocation(PathBuf::from(s))
-        ).padding(5);
-        let client_loction_browse = Button::new(&mut self.client_location_browse, Text::new("Browse...")).on_press(Interaction::BrowseClientLocation);
+            |s| Interaction::ChangeClientLocation(PathBuf::from(s)),
+        )
+        .padding(5);
+        let client_loction_browse =
+            Button::new(&mut self.client_location_browse, Text::new("Browse..."))
+                .on_press(Interaction::BrowseClientLocation);
         let client_location_row = Row::new()
             .push(client_location_label)
             .push(client_location_input)
@@ -370,9 +405,13 @@ impl Application for State {
             .align_items(Align::Center)
             .spacing(5)
             .padding(5);
-        
+
         let client_options_label = Text::new("Options:").width(Length::Units(140));
-        let create_profile = Checkbox::new(self.generate_profile, "Generate profile", Interaction::GenerateProfile);
+        let create_profile = Checkbox::new(
+            self.generate_profile,
+            "Generate profile",
+            Interaction::GenerateProfile,
+        );
         let client_options_row = Row::new()
             .push(client_options_label)
             .push(create_profile)
@@ -380,15 +419,17 @@ impl Application for State {
             .spacing(5)
             .padding(5);
 
-
         let server_location_label = Text::new("Directory:").width(Length::Units(140));
         let server_location_input = TextInput::new(
             &mut self.server_location_input,
             "Install location",
             self.server_location.to_str().unwrap(),
-            |s| Interaction::ChangeServerLocation(PathBuf::from(s))
-        ).padding(5);
-        let server_loction_browse = Button::new(&mut self.server_location_browse, Text::new("Browse...")).on_press(Interaction::BrowseServerLocation);
+            |s| Interaction::ChangeServerLocation(PathBuf::from(s)),
+        )
+        .padding(5);
+        let server_loction_browse =
+            Button::new(&mut self.server_location_browse, Text::new("Browse..."))
+                .on_press(Interaction::BrowseServerLocation);
         let server_location_row = Row::new()
             .push(server_location_label)
             .push(server_location_input)
@@ -397,10 +438,18 @@ impl Application for State {
             .align_items(Align::Center)
             .spacing(5)
             .padding(5);
-        
+
         let server_options_label = Text::new("Options:").width(Length::Units(140));
-        let download_server_jar = Checkbox::new(self.download_server_jar, "Download server jar", Interaction::DownloadServerJar);
-        let generate_launch_script = Checkbox::new(self.generate_launch_script, "Generate launch script", Interaction::GenerateLaunchScript);
+        let download_server_jar = Checkbox::new(
+            self.download_server_jar,
+            "Download server jar",
+            Interaction::DownloadServerJar,
+        );
+        let generate_launch_script = Checkbox::new(
+            self.generate_launch_script,
+            "Generate launch script",
+            Interaction::GenerateLaunchScript,
+        );
         let server_options_row = Row::new()
             .push(server_options_label)
             .push(download_server_jar)
@@ -408,7 +457,6 @@ impl Application for State {
             .align_items(Align::Center)
             .spacing(5)
             .padding(5);
-
 
         let mut column = Column::new()
             .padding(5)
@@ -420,28 +468,23 @@ impl Application for State {
 
         match self.selected_installation {
             Installation::Client => {
-                column = column
-                    .push(client_location_row)
-                    .push(client_options_row);
-            },
+                column = column.push(client_location_row).push(client_options_row);
+            }
             Installation::Server => {
-                column = column
-                    .push(server_location_row)
-                    .push(server_options_row);
-            },
+                column = column.push(server_location_row).push(server_options_row);
+            }
         }
 
         let button_label = Text::new("Install")
             .horizontal_alignment(HorizontalAlignment::Center)
             .width(Length::Fill);
-        let mut button = Button::new(&mut self.install_button, button_label)
-            .width(Length::Fill);
+        let mut button = Button::new(&mut self.install_button, button_label).width(Length::Fill);
         if !self.is_installing {
             button = button.on_press(Interaction::Install);
         }
         let progress = ProgressBar::new(0.0..=1.0, self.progress);
         column = column.push(button).push(progress);
-        
+
         let content: Element<Interaction> = column.into();
         content.map(Message::Interaction)
     }

@@ -13,7 +13,7 @@ const ICON: &[u8] = include_bytes!("../quilt.png");
 pub struct Args {
     /// Start the installer in no-gui mode
     #[clap(long)]
-    no_gui: bool
+    no_gui: bool,
 }
 
 fn main() -> Result<()> {
