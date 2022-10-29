@@ -6,6 +6,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings"
 
 jobs:
   check-linux:
@@ -22,7 +23,7 @@ jobs:
         cargo install cross
         rustup component add rustfmt clippy
     - name: Check
-      run: cross clippy -Dwarnings --target x86_64-unknown-linux-gnu
+      run: cross clippy --target x86_64-unknown-linux-gnu
     - name: Formatting
       run: cross fmt --check
   check-windows:
@@ -37,7 +38,7 @@ jobs:
     - name: Install rustfmt, clippy
       run: rustup component add rustfmt clippy
     - name: Check
-      run: cargo clippy -Dwarnings
+      run: cargo clippy
     - name: Formatting
       run: cargo fmt --check
   check-mac:
@@ -52,6 +53,6 @@ jobs:
     - name: Install rustfmt, clippy
       run: rustup component add rustfmt clippy
     - name: Check
-      run: cargo clippy -Dwarnings
+      run: cargo clippy
     - name: Formatting
       run: cargo fmt --check
