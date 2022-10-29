@@ -13,16 +13,16 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v3
-    - name: Install cross
-      run: |
-        cargo install cross
-        rustup component add rustfmt clippy
     - name: Setup cache
       uses: Swatinem/rust-cache@v2
       with:
         cache-on-failure: true
+    - name: Install cross
+      run: |
+        cargo install cross
+        rustup component add rustfmt clippy
     - name: Check
-      run: cross clippy --target x86_64-unknown-linux-gnu
+      run: cross clippy -Dwarnings --target x86_64-unknown-linux-gnu
     - name: Formatting
       run: cross fmt --check
   check-windows:
@@ -30,14 +30,14 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v3
-    - name: Install rustfmt, clippy
-      run: rustup component add rustfmt clippy
     - name: Setup cache
       uses: Swatinem/rust-cache@v2
       with:
         cache-on-failure: true
+    - name: Install rustfmt, clippy
+      run: rustup component add rustfmt clippy
     - name: Check
-      run: cargo clippy
+      run: cargo clippy -Dwarnings
     - name: Formatting
       run: cargo fmt --check
   check-mac:
@@ -45,13 +45,13 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v3
-    - name: Install rustfmt, clippy
-      run: rustup component add rustfmt clippy
     - name: Setup cache
       uses: Swatinem/rust-cache@v2
       with:
         cache-on-failure: true
+    - name: Install rustfmt, clippy
+      run: rustup component add rustfmt clippy
     - name: Check
-      run: cargo clippy
+      run: cargo clippy -Dwarnings
     - name: Formatting
       run: cargo fmt --check
