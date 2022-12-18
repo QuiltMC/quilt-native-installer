@@ -1,7 +1,7 @@
-use std::collections::HashMap;
 use std::fmt::Display;
 use std::fs::File;
 use std::path::PathBuf;
+use std::{collections::HashMap, fs::OpenOptions};
 
 use crate::ICON;
 use anyhow::{anyhow, Result};
@@ -83,7 +83,7 @@ struct LaunchProfiles {
 #[serde(rename_all = "camelCase")]
 struct Profile {
     name: String,
-    created: DateTime<Utc>,
+    created: Option<DateTime<Utc>>,
     last_version_id: String,
     icon: String,
 }
@@ -104,27 +104,21 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
         "quilt-loader-{}-{}",
         args.loader_version.version, args.minecraft_version.version
     );
-    let mut profile_dir = args.install_location.clone();
-    profile_dir.push("versions");
-    profile_dir.push(&profile_name);
+    let profile_dir = args.install_location.join("versions").join(&profile_name);
 
-    // Delete existing profile
     if profile_dir.exists() {
+        // Delete existing profile
         std::fs::remove_dir_all(&profile_dir)?;
+    } else {
+        // Else create the directory
+        std::fs::create_dir_all(&profile_dir)?;
     }
 
-    // Create directory
-    std::fs::create_dir_all(&profile_dir)?;
-
-    // NOTE: This is an empty jar file to make the vanilla launcher happy
-    let mut jar_path = profile_dir.clone();
-    jar_path.push(format!("{}.jar", &profile_name));
-    File::create(jar_path)?;
+    // An empty jar file to make the vanilla launcher happy
+    File::create(profile_dir.join(&profile_name).with_extension("jar"))?;
 
     // Create launch json
-    let mut json_path = profile_dir.clone();
-    json_path.push(format!("{}.json", &profile_name));
-    let mut file = File::create(json_path)?;
+    let mut file = File::create(profile_dir.join(&profile_name).with_extension("json"))?;
 
     // Download launch json
     let response = reqwest::get(format!(
@@ -162,29 +156,30 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
 
     // Generate profile
     if args.generate_profile {
-        let profiles_json = args.install_location.join("launcher_profiles.json");
+        let file = OpenOptions::new().read(true).write(true).open(
+            args.install_location
+                .join("launcher_profiles")
+                .with_extension("json"),
+        )?;
+        let mut launch_profiles: LaunchProfiles = serde_json::from_reader(&file)?;
 
-        let read_file = File::open(&profiles_json)?;
-        let mut profiles: LaunchProfiles = serde_json::from_reader(read_file)?;
-
-        profiles.profiles.insert(
+        launch_profiles.profiles.insert(
             profile_name.clone(),
             Profile {
                 name: format!("quilt-loader-{}", &args.minecraft_version.version),
-                created: Utc::now(),
+                created: Some(Utc::now()),
                 last_version_id: profile_name,
                 icon: format!("data:image/png;base64,{}", base64::encode(ICON)),
             },
         );
 
-        let write_file = File::create(&profiles_json)?;
-        serde_json::to_writer_pretty(write_file, &profiles)?;
+        serde_json::to_writer_pretty(file, &launch_profiles)?;
     }
 
     Ok(())
 }
 
 pub async fn install_server(args: ServerInstallation) -> Result<()> {
-    println!("Installing server: {:#?}", args);
+    println!("Not installing server :(\n{:#?}", args);
     Ok(())
 }
