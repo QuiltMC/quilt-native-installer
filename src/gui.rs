@@ -1,8 +1,9 @@
 use std::borrow::Cow;
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Error, Result};
+use iced::widget::{Radio, Space};
 use iced::window::{Icon, Settings as WindowSettings};
 use iced::Theme;
 use iced::{
@@ -18,11 +19,9 @@ use crate::installer::{
     fetch_loader_versions, fetch_minecraft_versions, install_client, install_server,
     ClientInstallation, Installation, LoaderVersion, MinecraftVersion, ServerInstallation,
 };
-use crate::Args;
 
-pub fn run(args: Args) -> Result<()> {
+pub fn run() -> Result<()> {
     State::run(Settings {
-        flags: args,
         window: WindowSettings {
             size: (600, 300),
             resizable: false,
@@ -56,7 +55,7 @@ struct State {
     selected_loader_version: Option<LoaderVersion>,
     show_betas: bool,
 
-    selected_installation: Installation,
+    installation_type: Installation,
 
     client_location: PathBuf,
     generate_profile: bool,
@@ -68,25 +67,6 @@ struct State {
     is_installing: bool,
 
     progress: f32,
-}
-
-impl Installation {
-    const ALL: &'static [Installation] = &[Self::Client, Self::Server];
-}
-
-impl Display for Installation {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Installation::Client => write!(f, "Client"),
-            Installation::Server => write!(f, "Server"),
-        }
-    }
-}
-
-impl Default for Installation {
-    fn default() -> Self {
-        Self::Client
-    }
 }
 
 #[derive(Debug)]
@@ -145,14 +125,14 @@ fn get_default_client_directory() -> PathBuf {
 impl Application for State {
     type Message = Message;
     type Executor = executor::Default;
-    type Flags = Args;
+    type Flags = ();
     type Theme = Theme;
 
     fn theme(&self) -> Self::Theme {
         Theme::Dark
     }
 
-    fn new(_args: Args) -> (Self, Command<Self::Message>) {
+    fn new(_: ()) -> (Self, Command<Self::Message>) {
         (
             State {
                 client_location: get_default_client_directory(),
@@ -180,7 +160,7 @@ impl Application for State {
                 Interaction::BrowseClientLocation => return Message::BrowseClientLocation.into(),
                 Interaction::Install => return Message::Install.into(),
                 Interaction::SelectInstallation(installation) => {
-                    self.selected_installation = installation
+                    self.installation_type = installation
                 }
                 Interaction::SelectLoaderVersion(version) => {
                     self.selected_loader_version = Some(version)
@@ -267,7 +247,7 @@ impl Application for State {
                 self.is_installing = true;
                 self.progress = 0.0;
 
-                match self.selected_installation {
+                match self.installation_type {
                     Installation::Client => {
                         if self.selected_loader_version.is_none() {
                             return Message::Error(anyhow!("No Loader version selected!")).into();
@@ -332,22 +312,29 @@ impl Application for State {
     }
 
     fn view(&self) -> iced::Element<'_, Self::Message> {
-        let installation_label = Text::new("Installation:").width(Length::Units(140));
-        let installation_list = PickList::new(
-            Installation::ALL,
-            Some(self.selected_installation),
+        let installation_label = Text::new("Installation:").width(140.into());
+        let installation_client = Radio::new(
+            Installation::Client,
+            "Client",
+            Some(self.installation_type),
             Interaction::SelectInstallation,
-        )
-        .width(Length::Fill);
+        );
+        let installation_server = Radio::new(
+            Installation::Server,
+            "Server",
+            Some(self.installation_type),
+            Interaction::SelectInstallation,
+        );
         let installation_row = Row::new()
             .push(installation_label)
-            .push(installation_list)
+            .push(installation_client)
+            .push(installation_server)
             .width(Length::Fill)
-            .align_items(Alignment::Center)
-            .spacing(5)
+            .align_items(Alignment::Fill)
+            .spacing(50)
             .padding(5);
 
-        let minecraft_version_label = Text::new("Minecraft version:").width(Length::Units(140));
+        let minecraft_version_label = Text::new("Minecraft version:").width(140.into());
         let minecraft_version_list = PickList::new(
             Cow::from_iter(
                 self.minecraft_versions
@@ -358,7 +345,7 @@ impl Application for State {
             self.selected_minecraft_version.clone(),
             Interaction::SelectMcVersion,
         )
-        .width(Length::Fill);
+        .width(200.into());
         let enable_snapshots = Checkbox::new(
             self.show_snapshots,
             "Show snapshots",
@@ -367,13 +354,14 @@ impl Application for State {
         let mc_row = Row::new()
             .push(minecraft_version_label)
             .push(minecraft_version_list)
+            .push(Space::new(20.into(), 0.into()))
             .push(enable_snapshots)
             .width(Length::Fill)
             .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
-        let loader_version_label = Text::new("Loader version:").width(Length::Units(140));
+        let loader_version_label = Text::new("Loader version:").width(140.into());
         let loader_version_list = PickList::new(
             Cow::from_iter(
                 self.loader_versions
@@ -384,18 +372,19 @@ impl Application for State {
             self.selected_loader_version.clone(),
             Interaction::SelectLoaderVersion,
         )
-        .width(Length::Fill);
+        .width(200.into());
         let enable_betas = Checkbox::new(self.show_betas, "Show betas", Interaction::ToggleBetas);
         let loader_row = Row::new()
             .push(loader_version_label)
             .push(loader_version_list)
+            .push(Space::new(20.into(), 0.into()))
             .push(enable_betas)
             .width(Length::Fill)
             .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
-        let client_location_label = Text::new("Directory:").width(Length::Units(140));
+        let client_location_label = Text::new("Directory:").width(140.into());
         let client_location_input = TextInput::new(
             "Install location",
             self.client_location.to_str().unwrap(),
@@ -413,7 +402,7 @@ impl Application for State {
             .spacing(5)
             .padding(5);
 
-        let client_options_label = Text::new("Options:").width(Length::Units(140));
+        let client_options_label = Text::new("Options:").width(140.into());
         let create_profile = Checkbox::new(
             self.generate_profile,
             "Generate profile",
@@ -426,7 +415,7 @@ impl Application for State {
             .spacing(5)
             .padding(5);
 
-        let server_location_label = Text::new("Directory:").width(Length::Units(140));
+        let server_location_label = Text::new("Directory:").width(140.into());
         let server_location_input = TextInput::new(
             "Install location",
             self.server_location.to_str().unwrap(),
@@ -444,7 +433,7 @@ impl Application for State {
             .spacing(5)
             .padding(5);
 
-        let server_options_label = Text::new("Options:").width(Length::Units(140));
+        let server_options_label = Text::new("Options:").width(140.into());
         let download_server_jar = Checkbox::new(
             self.download_server_jar,
             "Download server jar",
@@ -458,6 +447,7 @@ impl Application for State {
         let server_options_row = Row::new()
             .push(server_options_label)
             .push(download_server_jar)
+            .push(Space::new(35.into(), 0.into()))
             .push(generate_launch_script)
             .align_items(Alignment::Center)
             .spacing(5)
@@ -471,7 +461,7 @@ impl Application for State {
             .push(loader_row)
             .push(Rule::horizontal(5));
 
-        match self.selected_installation {
+        match self.installation_type {
             Installation::Client => {
                 column = column.push(client_location_row).push(client_options_row);
             }

@@ -1,28 +1,23 @@
 #![windows_subsystem = "windows"]
 
-use anyhow::Result;
 use clap::Parser;
 
+mod cli;
 mod gui;
 mod installer;
 
 const ICON: &[u8] = include_bytes!("../quilt.png");
 
-#[derive(Default, Parser)]
-#[clap(about, version)]
-pub struct Args {
-    /// Start the installer without a gui
-    #[clap(long)]
-    no_gui: bool,
-}
+fn main() -> anyhow::Result<()> {
+    let args = cli::Args::parse();
 
-fn main() -> Result<()> {
-    let args = Args::parse();
-
-    if args.no_gui {
-        println!("No gui mode")
+    if let Some(subcommand) = args.subcommand {
+        match subcommand {
+            cli::SubCommands::Client => println!("Installing client..."),
+            cli::SubCommands::Server => println!("Installing server..."),
+        }
     } else {
-        gui::run(args)?;
+        gui::run()?;
     }
 
     Ok(())
