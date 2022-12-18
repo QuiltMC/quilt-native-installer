@@ -6,14 +6,14 @@ use clap::Parser;
 mod gui;
 mod installer;
 
-const ICON: &'static [u8] = include_bytes!("../quilt.png");
+const ICON: &[u8] = include_bytes!("../quilt.png");
 
 #[derive(Default, Parser)]
 #[clap(about, version)]
 pub struct Args {
-    /// Start the installer in no-gui mode
+    /// Start the installer without a gui
     #[clap(long)]
-    no_gui: bool
+    no_gui: bool,
 }
 
 fn main() -> Result<()> {
