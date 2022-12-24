@@ -2330,13 +2330,11 @@ name = "quilt-installer"
 version = "0.1.1"
 dependencies = [
  "anyhow",
- "async-trait",
  "base64",
  "chrono",
  "clap",
  "dark-light",
  "iced",
- "iced_glow",
  "native-dialog",
  "png",
  "reqwest",

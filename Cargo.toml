@@ -15,10 +15,8 @@ chrono = { version = "0.4", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 clap = { version = "4.0", features = ["derive"] }
 native-dialog = "0.6"
-async-trait = "0.1"
 dark-light = "0.2"
 serde_json = "1.0"
-iced_glow = "0.5"
 base64 = "0.13"
 anyhow = "1.0"
 png = "0.17"
