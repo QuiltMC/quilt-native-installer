@@ -256,7 +256,7 @@ impl Application for State {
                 self.is_installing = true;
                 self.progress = 0.0;
 
-                match self.installation_type {
+                return match self.installation_type {
                     Installation::Client => Command::perform(
                         install_client(ClientInstallation {
                             minecraft_version: match &self.selected_minecraft_version {
