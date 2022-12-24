@@ -129,7 +129,11 @@ impl Application for State {
     type Theme = Theme;
 
     fn theme(&self) -> Self::Theme {
-        Theme::Dark
+        use dark_light::Mode;
+        match dark_light::detect() {
+            Mode::Light => Theme::Light,
+            Mode::Dark => Theme::Dark,
+        }
     }
 
     fn new(_: ()) -> (Self, Command<Self::Message>) {
@@ -150,7 +154,14 @@ impl Application for State {
     }
 
     fn title(&self) -> String {
-        "Quilt Installer".to_owned()
+        format!(
+            "Quilt Installer{}",
+            if self.is_installing {
+                " - Installing"
+            } else {
+                ""
+            }
+        )
     }
 
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
