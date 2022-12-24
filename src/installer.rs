@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::copy;
 use std::{
@@ -78,13 +77,9 @@ pub async fn fetch_loader_versions() -> Result<Vec<LoaderVersion>> {
         .await?)
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct LauncherProfiles {
-    profiles: HashMap<String, Value>,
-    settings: Value,
-    version: u32,
-}
-
+/// `Deserialize` is not implemented for a reason
+///
+/// DO NOT deserialise `launcher_profiles.json` into this incomplete struct and write it back as it will cause **data loss**
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Profile {
@@ -168,20 +163,25 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
                 .with_extension("json"),
         )?;
 
-        let mut launcher_profiles: LauncherProfiles = serde_json::from_reader(&file)?;
+        let mut launcher_profiles: Value = serde_json::from_reader(&file)?;
         file.set_len(0)?;
         file.rewind()?;
 
-        launcher_profiles.profiles.insert(
-            profile_name.clone(),
-            to_value(Profile {
-                name: format!("Quilt Loader {}", &args.minecraft_version.version),
-                profile_type: "custom".into(),
-                created: Utc::now(),
-                last_version_id: profile_name,
-                icon: format!("data:image/png;base64,{}", base64::encode(ICON)),
-            })?,
-        );
+        launcher_profiles
+            .get_mut("profiles")
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .insert(
+                profile_name.clone(),
+                to_value(Profile {
+                    name: format!("Quilt Loader {}", &args.minecraft_version.version),
+                    profile_type: "custom".into(),
+                    created: Utc::now(),
+                    last_version_id: profile_name,
+                    icon: format!("data:image/png;base64,{}", base64::encode(ICON)),
+                })?,
+            );
 
         serde_json::to_writer_pretty(file, &launcher_profiles)?;
     }
