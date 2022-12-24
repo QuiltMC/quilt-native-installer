@@ -47,25 +47,29 @@ fn create_icon() -> Result<Icon> {
 
 #[derive(Debug, Default)]
 struct State {
+    // MC version picker
     minecraft_versions: Vec<MinecraftVersion>,
     selected_minecraft_version: Option<MinecraftVersion>,
     show_snapshots: bool,
 
+    // Quilt loader version picker
     loader_versions: Vec<LoaderVersion>,
     selected_loader_version: Option<LoaderVersion>,
     show_betas: bool,
 
     installation_type: Installation,
 
+    // Client settings
     client_location: PathBuf,
     generate_profile: bool,
 
+    // Server settings
     server_location: PathBuf,
     download_server_jar: bool,
     generate_launch_script: bool,
 
+    // Progress information
     is_installing: bool,
-
     progress: f32,
 }
 
@@ -170,15 +174,9 @@ impl Application for State {
                 Interaction::ChangeClientLocation(location) => self.client_location = location,
                 Interaction::BrowseClientLocation => return Message::BrowseClientLocation.into(),
                 Interaction::Install => return Message::Install.into(),
-                Interaction::SelectInstallation(installation) => {
-                    self.installation_type = installation
-                }
-                Interaction::SelectLoaderVersion(version) => {
-                    self.selected_loader_version = Some(version)
-                }
-                Interaction::SelectMcVersion(version) => {
-                    self.selected_minecraft_version = Some(version)
-                }
+                Interaction::SelectInstallation(i) => self.installation_type = i,
+                Interaction::SelectLoaderVersion(v) => self.selected_loader_version = Some(v),
+                Interaction::SelectMcVersion(v) => self.selected_minecraft_version = Some(v),
                 Interaction::ToggleSnapshots(enable) => {
                     self.show_snapshots = enable;
                     self.selected_minecraft_version = self
@@ -259,59 +257,61 @@ impl Application for State {
                 self.progress = 0.0;
 
                 match self.installation_type {
-                    Installation::Client => {
-                        if self.selected_loader_version.is_none() {
-                            return Message::Error(anyhow!("No Loader version selected!")).into();
-                        }
-
-                        return Command::perform(
-                            install_client(ClientInstallation {
-                                minecraft_version: match &self.selected_minecraft_version {
-                                    Some(s) => s.clone(),
-                                    None => {
-                                        return Message::Error(anyhow!(
-                                            "No Loader version selected!"
-                                        ))
+                    Installation::Client => Command::perform(
+                        install_client(ClientInstallation {
+                            minecraft_version: match &self.selected_minecraft_version {
+                                Some(s) => s.clone(),
+                                None => {
+                                    return Message::Error(anyhow!(
+                                        "No Minecraft version selected!"
+                                    ))
+                                    .into()
+                                }
+                            },
+                            loader_version: match &self.selected_loader_version {
+                                Some(s) => s.clone(),
+                                None => {
+                                    return Message::Error(anyhow!("No Loader version selected!"))
                                         .into()
-                                    }
-                                },
-                                loader_version: self.selected_loader_version.clone().unwrap(),
-                                install_location: self.client_location.clone(),
-                                generate_profile: self.generate_profile,
-                            }),
-                            Message::DoneInstalling,
-                        );
-                    }
-                    Installation::Server => {
-                        if self.selected_minecraft_version.is_none() {
-                            return Message::Error(anyhow!("No Minecraft version selected!"))
-                                .into();
-                        }
-
-                        if self.selected_loader_version.is_none() {
-                            return Message::Error(anyhow!("No Loader version selected!")).into();
-                        }
-
-                        return Command::perform(
-                            install_server(ServerInstallation {
-                                minecraft_version: self.selected_minecraft_version.clone().unwrap(),
-                                loader_version: self.selected_loader_version.clone().unwrap(),
-                                install_location: self.server_location.clone(),
-                                download_jar: self.download_server_jar,
-                                generate_script: self.generate_launch_script,
-                            }),
-                            Message::DoneInstalling,
-                        );
-                    }
-                }
+                                }
+                            },
+                            install_location: self.client_location.clone(),
+                            generate_profile: self.generate_profile,
+                        }),
+                        Message::DoneInstalling,
+                    ),
+                    Installation::Server => Command::perform(
+                        install_server(ServerInstallation {
+                            minecraft_version: match &self.selected_minecraft_version {
+                                Some(s) => s.clone(),
+                                None => {
+                                    return Message::Error(anyhow!(
+                                        "No Minecraft version selected!"
+                                    ))
+                                    .into()
+                                }
+                            },
+                            loader_version: match &self.selected_loader_version {
+                                Some(s) => s.clone(),
+                                None => {
+                                    return Message::Error(anyhow!("No Loader version selected!"))
+                                        .into()
+                                }
+                            },
+                            install_location: self.server_location.clone(),
+                            download_jar: self.download_server_jar,
+                            generate_script: self.generate_launch_script,
+                        }),
+                        Message::DoneInstalling,
+                    ),
+                };
             }
             Message::DoneInstalling(res) => {
                 self.is_installing = false;
                 self.progress = 1.0;
 
-                match res {
-                    Ok(_) => (),
-                    Err(e) => return Message::Error(e).into(),
+                if let Err(e) = res {
+                    return Message::Error(e).into();
                 }
             }
             Message::Error(error) => {

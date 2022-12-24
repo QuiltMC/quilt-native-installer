@@ -1,12 +1,10 @@
 use std::fmt::Display;
-use std::io::copy;
 use std::{
     fs::{create_dir_all, remove_dir_all, File, OpenOptions},
-    io::Seek,
+    io::{copy, Seek},
     path::PathBuf,
 };
 
-use crate::ICON;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use reqwest::get;
@@ -179,7 +177,7 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
                     profile_type: "custom".into(),
                     created: Utc::now(),
                     last_version_id: profile_name,
-                    icon: format!("data:image/png;base64,{}", base64::encode(ICON)),
+                    icon: format!("data:image/png;base64,{}", base64::encode(crate::ICON)),
                 })?,
             );
 

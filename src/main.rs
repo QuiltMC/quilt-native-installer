@@ -16,6 +16,8 @@ fn main() -> anyhow::Result<()> {
             cli::SubCommands::Client => println!("Installing client..."),
             cli::SubCommands::Server => println!("Installing server..."),
         }
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        println!("Just kidding, we haven't implemented the CLI yet :)");
     } else {
         gui::run()?;
     }
