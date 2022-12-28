@@ -190,7 +190,7 @@ impl Application for State {
                     self.selected_loader_version = self
                         .loader_versions
                         .iter()
-                        .find(|v| enable || !v.version.contains("beta"))
+                        .find(|v| enable || !v.version.pre.contains("beta"))
                         .cloned();
                 }
                 Interaction::GenerateLaunchScript(value) => self.generate_launch_script = value,
@@ -218,7 +218,7 @@ impl Application for State {
                     self.selected_loader_version = self
                         .loader_versions
                         .iter()
-                        .find(|v| !v.version.contains("beta"))
+                        .find(|v| !v.version.pre.contains("beta"))
                         .cloned();
                 }
             }
@@ -377,7 +377,7 @@ impl Application for State {
             Cow::from_iter(
                 self.loader_versions
                     .iter()
-                    .filter(|v| self.show_betas || !v.version.contains("beta"))
+                    .filter(|v| self.show_betas || !v.version.pre.contains("beta"))
                     .cloned(),
             ),
             self.selected_loader_version.clone(),

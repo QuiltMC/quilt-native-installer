@@ -8,6 +8,7 @@ use std::{
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use reqwest::get;
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_json::{to_value, Value};
 
@@ -49,10 +50,10 @@ impl Display for MinecraftVersion {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct LoaderVersion {
-    pub separator: String,
+    pub separator: char,
     pub build: u32,
     pub maven: String,
-    pub version: String,
+    pub version: Version,
 }
 
 impl Display for LoaderVersion {
@@ -120,7 +121,7 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
     let mut file = File::create(profile_dir.join(&profile_name).with_extension("json"))?;
 
     // Download launch json
-    let response = get(format!(
+    let mut response = get(format!(
         "https://meta.quiltmc.org/v3/versions/loader/{}/{}/profile/json",
         &args.minecraft_version.version, &args.loader_version.version
     ))
@@ -129,26 +130,29 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
     .await?;
 
     // Hack-Fix:
-    // Quilt-meta specifies both hashed and intermediary, but providing both to quilt-loader causes it to silently fail remapping.
-    // This really shouldn't be fixed here in the installer, but we need a solution now.
-    let mut json: Value = serde_json::from_str(&response).unwrap();
-    let libs = json
-        .as_object_mut()
-        .unwrap()
-        .get_mut("libraries")
-        .unwrap()
-        .as_array_mut()
-        .unwrap();
-    libs.retain(|lib| {
-        !lib.as_object()
+    // Was fixed in version 0.18
+    if args.loader_version.version.minor < 18 {
+        // Quilt-meta specifies both hashed and intermediary, but providing both to quilt-loader causes it to silently fail remapping.
+        // This really shouldn't be fixed here in the installer, but we need a solution now.
+        let mut json: Value = serde_json::from_str(&response).unwrap();
+        let libs = json
+            .as_object_mut()
             .unwrap()
-            .get("name")
+            .get_mut("libraries")
             .unwrap()
-            .as_str()
-            .unwrap()
-            .starts_with("org.quiltmc:hashed")
-    });
-    let response = serde_json::to_string(&json).unwrap();
+            .as_array_mut()
+            .unwrap();
+        libs.retain(|lib| {
+            !lib.as_object()
+                .unwrap()
+                .get("name")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .starts_with("org.quiltmc:hashed")
+        });
+        response = serde_json::to_string(&json).unwrap();
+    }
     // End of hack-fix
 
     copy(&mut response.as_bytes(), &mut file)?;

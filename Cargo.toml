@@ -12,6 +12,7 @@ iced = { version = "0.6", default-features = false, features = [
     "tokio",
 ] }
 chrono = { version = "0.4", features = ["serde"] }
+semver = { version = "1.0", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 clap = { version = "4.0", features = ["derive"] }
 native-dialog = "0.6"
