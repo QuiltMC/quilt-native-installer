@@ -115,10 +115,10 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
     create_dir_all(&profile_dir)?;
 
     // An empty jar file to make the vanilla launcher happy
-    File::create(profile_dir.join(&profile_name).with_extension("jar"))?;
+    File::create(profile_dir.join(profile_name.clone() + ".jar"))?;
 
     // Create launch json
-    let mut file = File::create(profile_dir.join(&profile_name).with_extension("json"))?;
+    let mut file = File::create(profile_dir.join(profile_name.clone() + ".json"))?;
 
     // Download launch json
     let mut response = get(format!(
