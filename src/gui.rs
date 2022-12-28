@@ -136,7 +136,7 @@ impl Application for State {
         use dark_light::Mode;
         match dark_light::detect() {
             Mode::Light => Theme::Light,
-            Mode::Dark => Theme::Dark,
+            Mode::Dark | Mode::Default => Theme::Dark,
         }
     }
 

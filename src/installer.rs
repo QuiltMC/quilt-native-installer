@@ -130,8 +130,8 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
     .await?;
 
     // Hack-Fix:
-    // Was fixed in version 0.18
-    if args.loader_version.version.minor < 18 {
+    // Was fixed in versions above 0.17.7
+    if args.loader_version.version < Version::new(0, 17, 7) {
         // Quilt-meta specifies both hashed and intermediary, but providing both to quilt-loader causes it to silently fail remapping.
         // This really shouldn't be fixed here in the installer, but we need a solution now.
         let mut json: Value = serde_json::from_str(&response).unwrap();
