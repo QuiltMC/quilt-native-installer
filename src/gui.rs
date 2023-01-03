@@ -47,12 +47,12 @@ fn create_icon() -> Result<Icon> {
 
 #[derive(Debug, Default)]
 struct State {
-    // MC version picker
+    // Minecraft version picker
     minecraft_versions: Vec<MinecraftVersion>,
     selected_minecraft_version: Option<MinecraftVersion>,
     show_snapshots: bool,
 
-    // Quilt loader version picker
+    // Quilt Loader version picker
     loader_versions: Vec<LoaderVersion>,
     selected_loader_version: Option<LoaderVersion>,
     show_betas: bool,
@@ -158,14 +158,7 @@ impl Application for State {
     }
 
     fn title(&self) -> String {
-        format!(
-            "Quilt Installer{}",
-            if self.is_installing {
-                " - Installing"
-            } else {
-                ""
-            }
-        )
+        "Quilt Installer".into()
     }
 
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
@@ -190,7 +183,7 @@ impl Application for State {
                     self.selected_loader_version = self
                         .loader_versions
                         .iter()
-                        .find(|v| enable || !v.version.pre.contains("beta"))
+                        .find(|v| enable || v.version.pre.is_empty())
                         .cloned();
                 }
                 Interaction::GenerateLaunchScript(value) => self.generate_launch_script = value,
@@ -218,7 +211,7 @@ impl Application for State {
                     self.selected_loader_version = self
                         .loader_versions
                         .iter()
-                        .find(|v| !v.version.pre.contains("beta"))
+                        .find(|v| v.version.pre.is_empty())
                         .cloned();
                 }
             }
@@ -473,12 +466,8 @@ impl Application for State {
             .push(Rule::horizontal(5));
 
         match self.installation_type {
-            Installation::Client => {
-                column = column.push(client_location_row).push(client_options_row);
-            }
-            Installation::Server => {
-                column = column.push(server_location_row).push(server_options_row);
-            }
+            Installation::Client => column = column.push(client_location_row).push(client_options_row),
+            Installation::Server => column = column.push(server_location_row).push(server_options_row),
         }
 
         let button_label = Text::new("Install")

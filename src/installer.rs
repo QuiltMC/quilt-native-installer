@@ -1,9 +1,4 @@
-use std::fmt::Display;
-use std::{
-    fs::{create_dir_all, remove_dir_all, File, OpenOptions},
-    io::{copy, Seek},
-    path::PathBuf,
-};
+use std::{fs, io::{Seek, self}, path::PathBuf};
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
@@ -42,7 +37,7 @@ pub struct MinecraftVersion {
     pub stable: bool,
 }
 
-impl Display for MinecraftVersion {
+impl std::fmt::Display for MinecraftVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.version)
     }
@@ -56,7 +51,7 @@ pub struct LoaderVersion {
     pub version: Version,
 }
 
-impl Display for LoaderVersion {
+impl std::fmt::Display for LoaderVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.version)
     }
@@ -96,29 +91,28 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
     // Verify install location
     if !args.install_location.exists() {
         return Err(anyhow!(
-            "Target directory doesn't exist: {:?}",
-            args.install_location
+            "Target directory doesn't exist: {}",
+            args.install_location.display(),
         ));
     }
 
     // Resolve profile directory
-    let profile_name = format!(
-        "quilt-loader-{}-{}",
-        args.loader_version.version, args.minecraft_version.version
-    );
+    let profile_name = format!("quilt-loader-{}-{}", args.loader_version, args.minecraft_version);
     let profile_dir = args.install_location.join("versions").join(&profile_name);
 
+    // Delete existing profile
     if profile_dir.exists() {
-        // Delete existing profile
-        remove_dir_all(&profile_dir)?;
+        fs::remove_dir_all(&profile_dir)?;
     }
-    create_dir_all(&profile_dir)?;
+    
+    // Create profile directory
+    fs::create_dir_all(&profile_dir)?;
 
-    // An empty jar file to make the vanilla launcher happy
-    File::create(profile_dir.join(profile_name.clone() + ".jar"))?;
+    // Create an empty jar file to make the vanilla launcher happy
+    fs::File::create(profile_dir.join(profile_name.clone() + ".jar"))?;
 
     // Create launch json
-    let mut file = File::create(profile_dir.join(profile_name.clone() + ".json"))?;
+    let mut file = fs::File::create(profile_dir.join(profile_name.clone() + ".json"))?;
 
     // Download launch json
     let mut response = get(format!(
@@ -155,11 +149,11 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
     }
     // End of hack-fix
 
-    copy(&mut response.as_bytes(), &mut file)?;
+    io::copy(&mut response.as_bytes(), &mut file)?;
 
     // Generate profile
     if args.generate_profile {
-        let mut file = OpenOptions::new().read(true).write(true).open(
+        let mut file = fs::OpenOptions::new().read(true).write(true).open(
             args.install_location
                 .join("launcher_profiles")
                 .with_extension("json"),
@@ -192,6 +186,7 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
 }
 
 pub async fn install_server(args: ServerInstallation) -> Result<()> {
-    println!("Not installing server :(\n{:#?}", args);
+    println!("Installing server\n{:#?}", args);
+    println!("Server installation hasn't been implemented yet!");
     Ok(())
 }
