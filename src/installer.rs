@@ -1,11 +1,16 @@
-use std::{fs, io::{Seek, self}, path::PathBuf};
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    io::{self, Seek},
+    path::PathBuf,
+};
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use reqwest::get;
 use semver::Version;
 use serde::{Deserialize, Serialize};
-use serde_json::{to_value, Value};
+use serde_json::{Map, Value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Installation {
@@ -71,10 +76,15 @@ pub async fn fetch_loader_versions() -> Result<Vec<LoaderVersion>> {
         .await?)
 }
 
-/// `Deserialize` is not implemented for a reason
-///
-/// DO NOT deserialise `launcher_profiles.json` into this incomplete struct and write it back as it will cause **data loss**
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LauncherProfiles {
+    profiles: HashMap<String, Profile>,
+    #[serde(flatten)]
+    other: Map<String, Value>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Profile {
     name: String,
@@ -83,6 +93,8 @@ struct Profile {
     created: DateTime<Utc>,
     last_version_id: String,
     icon: String,
+    #[serde(flatten)]
+    other: Map<String, Value>,
 }
 
 pub async fn install_client(args: ClientInstallation) -> Result<()> {
@@ -104,15 +116,15 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
     if profile_dir.exists() {
         fs::remove_dir_all(&profile_dir)?;
     }
-    
+
     // Create profile directory
     fs::create_dir_all(&profile_dir)?;
 
     // Create an empty jar file to make the vanilla launcher happy
-    fs::File::create(profile_dir.join(profile_name.clone() + ".jar"))?;
+    File::create(profile_dir.join(profile_name.clone() + ".jar"))?;
 
     // Create launch json
-    let mut file = fs::File::create(profile_dir.join(profile_name.clone() + ".json"))?;
+    let mut file = File::create(profile_dir.join(profile_name.clone() + ".json"))?;
 
     // Download launch json
     let mut response = get(format!(
@@ -159,25 +171,21 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
                 .with_extension("json"),
         )?;
 
-        let mut launcher_profiles: Value = serde_json::from_reader(&file)?;
+        let mut launcher_profiles: LauncherProfiles = serde_json::from_reader(&file)?;
         file.set_len(0)?;
         file.rewind()?;
 
-        launcher_profiles
-            .get_mut("profiles")
-            .unwrap()
-            .as_object_mut()
-            .unwrap()
-            .insert(
-                profile_name.clone(),
-                to_value(Profile {
-                    name: format!("Quilt Loader {}", &args.minecraft_version.version),
-                    profile_type: "custom".into(),
-                    created: Utc::now(),
-                    last_version_id: profile_name,
-                    icon: format!("data:image/png;base64,{}", base64::encode(crate::ICON)),
-                })?,
-            );
+        launcher_profiles.profiles.insert(
+            profile_name.clone(),
+            Profile {
+                name: format!("Quilt Loader {}", &args.minecraft_version.version),
+                profile_type: "custom".into(),
+                created: Utc::now(),
+                last_version_id: profile_name,
+                icon: format!("data:image/png;base64,{}", base64::encode(crate::ICON)),
+                other: Map::new(),
+            },
+        );
 
         serde_json::to_writer_pretty(file, &launcher_profiles)?;
     }
