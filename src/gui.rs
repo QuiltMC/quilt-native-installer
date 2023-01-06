@@ -93,8 +93,8 @@ enum Interaction {
     SelectInstallation(Installation),
     SelectLoaderVersion(LoaderVersion),
     SelectMcVersion(MinecraftVersion),
-    ToggleSnapshots(bool),
-    ToggleBetas(bool),
+    SetShowSnapshots(bool),
+    SetShowBetas(bool),
     GenerateLaunchScript(bool),
     GenerateProfile(bool),
     ChangeServerLocation(PathBuf),
@@ -170,7 +170,7 @@ impl Application for State {
                 Interaction::SelectInstallation(i) => self.installation_type = i,
                 Interaction::SelectLoaderVersion(v) => self.selected_loader_version = Some(v),
                 Interaction::SelectMcVersion(v) => self.selected_minecraft_version = Some(v),
-                Interaction::ToggleSnapshots(enable) => {
+                Interaction::SetShowSnapshots(enable) => {
                     self.show_snapshots = enable;
                     self.selected_minecraft_version = self
                         .minecraft_versions
@@ -178,7 +178,7 @@ impl Application for State {
                         .find(|v| enable || v.stable)
                         .cloned();
                 }
-                Interaction::ToggleBetas(enable) => {
+                Interaction::SetShowBetas(enable) => {
                     self.show_betas = enable;
                     self.selected_loader_version = self
                         .loader_versions
@@ -353,7 +353,7 @@ impl Application for State {
         let enable_snapshots = Checkbox::new(
             self.show_snapshots,
             "Show snapshots",
-            Interaction::ToggleSnapshots,
+            Interaction::SetShowSnapshots,
         );
         let mc_row = Row::new()
             .push(minecraft_version_label)
@@ -377,7 +377,7 @@ impl Application for State {
             Interaction::SelectLoaderVersion,
         )
         .width(200.into());
-        let enable_betas = Checkbox::new(self.show_betas, "Show betas", Interaction::ToggleBetas);
+        let enable_betas = Checkbox::new(self.show_betas, "Show betas", Interaction::SetShowBetas);
         let loader_row = Row::new()
             .push(loader_version_label)
             .push(loader_version_list)
@@ -465,10 +465,10 @@ impl Application for State {
             .push(loader_row)
             .push(Rule::horizontal(5));
 
-        match self.installation_type {
-            Installation::Client => column = column.push(client_location_row).push(client_options_row),
-            Installation::Server => column = column.push(server_location_row).push(server_options_row),
-        }
+        column = match self.installation_type {
+            Installation::Client => column.push(client_location_row).push(client_options_row),
+            Installation::Server => column.push(server_location_row).push(server_options_row),
+        };
 
         let button_label = Text::new("Install")
             .horizontal_alignment(Horizontal::Center)
