@@ -370,7 +370,7 @@ impl Application for State {
             Cow::from_iter(
                 self.loader_versions
                     .iter()
-                    .filter(|v| self.show_betas || !v.version.pre.contains("beta"))
+                    .filter(|v| self.show_betas || v.version.pre.is_empty())
                     .cloned(),
             ),
             self.selected_loader_version.clone(),
