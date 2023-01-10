@@ -101,9 +101,9 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
     println!("Installing client: {:#?}", args);
 
     // Verify install location
-    if !args.install_location.exists() {
+    if !args.install_location.join("launcher_profiles.json").exists() {
         return Err(anyhow!(
-            "Target directory doesn't exist: {}",
+            "{} is not a valid installation directory",
             args.install_location.display(),
         ));
     }
