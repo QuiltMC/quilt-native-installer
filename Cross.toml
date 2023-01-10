@@ -1,5 +1,11 @@
 [target.x86_64-unknown-linux-gnu]
-image = "ghcr.io/cross-rs/x86_64-unknown-linux-gnu:main-centos"
+# View the current image version: https://github.com/cross-rs/cross/pkgs/container/x86_64-unknown-linux-gnu
+# Note: For maximal glibc compatibility, the centos version is needed.
+#       To check the glibc version associated with centos, have a look
+#       at the table: https://github.com/cross-rs/cross#supported-targets
+#       Of interest is the x86_64-unknown-linux-gnu:centos row, which
+#       is glibc 2.17 for 0.2.4-centos
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-gnu:0.2.4-centos"
 pre-build = [                                  
     "yum -y install openssl-devel fontconfig-devel"
 ] 
