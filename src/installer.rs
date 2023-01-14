@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::{DateTime, Utc};
 use reqwest::get;
 use semver::Version;
@@ -182,7 +183,7 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
                 profile_type: "custom".into(),
                 created: Utc::now(),
                 last_version_id: profile_name,
-                icon: format!("data:image/png;base64,{}", base64::encode(crate::ICON)),
+                icon: format!("data:image/png;base64,{}", BASE64.encode(crate::ICON)),
                 other: Map::new(),
             },
         );

@@ -351,8 +351,8 @@ impl Application for State {
         )
         .width(200.into());
         let enable_snapshots = Checkbox::new(
-            self.show_snapshots,
             "Show snapshots",
+            self.show_snapshots,
             Interaction::SetShowSnapshots,
         );
         let mc_row = Row::new()
@@ -377,7 +377,7 @@ impl Application for State {
             Interaction::SelectLoaderVersion,
         )
         .width(200.into());
-        let enable_betas = Checkbox::new(self.show_betas, "Show betas", Interaction::SetShowBetas);
+        let enable_betas = Checkbox::new("Show betas", self.show_betas, Interaction::SetShowBetas);
         let loader_row = Row::new()
             .push(loader_version_label)
             .push(loader_version_list)
@@ -408,8 +408,8 @@ impl Application for State {
 
         let client_options_label = Text::new("Options:").width(140.into());
         let create_profile = Checkbox::new(
-            self.generate_profile,
             "Generate profile",
+            self.generate_profile,
             Interaction::GenerateProfile,
         );
         let client_options_row = Row::new()
@@ -439,13 +439,13 @@ impl Application for State {
 
         let server_options_label = Text::new("Options:").width(140.into());
         let download_server_jar = Checkbox::new(
-            self.download_server_jar,
             "Download server jar",
+            self.download_server_jar,
             Interaction::DownloadServerJar,
         );
         let generate_launch_script = Checkbox::new(
-            self.generate_launch_script,
             "Generate launch script",
+            self.generate_launch_script,
             Interaction::GenerateLaunchScript,
         );
         let server_options_row = Row::new()
