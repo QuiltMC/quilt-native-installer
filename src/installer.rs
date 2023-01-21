@@ -1,15 +1,21 @@
-use std::collections::HashMap;
-use std::fmt::Display;
-use std::fs::File;
-use std::path::PathBuf;
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    io::{self, Seek},
+    path::PathBuf,
+};
 
 use anyhow::{anyhow, Result};
-use chrono::Utc;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use chrono::{DateTime, Utc};
+use reqwest::get;
+use semver::Version;
 use serde::{Deserialize, Serialize};
-use crate::ICON;
+use serde_json::{Map, Value};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Installation {
+    #[default]
     Client,
     Server,
 }
@@ -19,7 +25,7 @@ pub struct ClientInstallation {
     pub minecraft_version: MinecraftVersion,
     pub loader_version: LoaderVersion,
     pub install_location: PathBuf,
-    pub generate_profile: bool
+    pub generate_profile: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -28,123 +34,168 @@ pub struct ServerInstallation {
     pub loader_version: LoaderVersion,
     pub install_location: PathBuf,
     pub download_jar: bool,
-    pub generate_script: bool
+    pub generate_script: bool,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct MinecraftVersion {
     pub version: String,
-    pub stable: bool
+    pub stable: bool,
 }
 
-impl Display for MinecraftVersion {
+impl std::fmt::Display for MinecraftVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.version)
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct LoaderVersion {
-    pub separator: String,
+    pub separator: char,
     pub build: u32,
     pub maven: String,
-    pub version: String,
+    pub version: Version,
 }
 
-impl Display for LoaderVersion {
+impl std::fmt::Display for LoaderVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.version)
     }
 }
 
 pub async fn fetch_minecraft_versions() -> Result<Vec<MinecraftVersion>> {
-    Ok(reqwest::get("https://meta.quiltmc.org/v3/versions/game").await?.json().await?)
+    Ok(get("https://meta.quiltmc.org/v3/versions/game")
+        .await?
+        .json()
+        .await?)
 }
 
 pub async fn fetch_loader_versions() -> Result<Vec<LoaderVersion>> {
-    Ok(reqwest::get("https://meta.quiltmc.org/v3/versions/loader").await?.json().await?)
+    Ok(get("https://meta.quiltmc.org/v3/versions/loader")
+        .await?
+        .json()
+        .await?)
 }
 
-#[derive(Serialize, Deserialize)]
-struct LaunchProfiles {
-    profiles: HashMap<String, serde_json::Value>,
-    settings: serde_json::Value,
-    version: u32
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LauncherProfiles {
+    profiles: HashMap<String, Profile>,
+    #[serde(flatten)]
+    other: Map<String, Value>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Profile {
+    name: String,
+    #[serde(rename = "type")]
+    profile_type: String,
+    created: DateTime<Utc>,
+    last_version_id: String,
+    icon: String,
+    #[serde(flatten)]
+    other: Map<String, Value>,
 }
 
 pub async fn install_client(args: ClientInstallation) -> Result<()> {
     println!("Installing client: {:#?}", args);
 
     // Verify install location
-    if !args.install_location.exists() {
-        return Err(anyhow!("Target directory doesn't exist: {:?}", args.install_location));
+    if !args.install_location.join("launcher_profiles.json").exists() {
+        return Err(anyhow!(
+            "{} is not a valid installation directory",
+            args.install_location.display(),
+        ));
     }
 
     // Resolve profile directory
-    let profile_name = format!("quilt-loader-{}-{}", args.loader_version.version, args.minecraft_version.version);
-    let mut profile_dir = args.install_location.clone();
-    profile_dir.push("versions");
-    profile_dir.push(&profile_name);
+    let profile_name = format!("quilt-loader-{}-{}", args.loader_version, args.minecraft_version);
+    let profile_dir = args.install_location.join("versions").join(&profile_name);
 
     // Delete existing profile
     if profile_dir.exists() {
-        std::fs::remove_dir_all(&profile_dir)?;
+        fs::remove_dir_all(&profile_dir)?;
     }
 
-    // Create directory
-    std::fs::create_dir_all(&profile_dir)?;
+    // Create profile directory
+    fs::create_dir_all(&profile_dir)?;
 
-    // NOTE: This is an empty jar file to make the vanilla launcher happy
-    let mut jar_path = profile_dir.clone();
-    jar_path.push(format!("{}.jar", &profile_name));
-    File::create(jar_path)?;
-    
+    // Create an empty jar file to make the vanilla launcher happy
+    File::create(profile_dir.join(profile_name.clone() + ".jar"))?;
+
     // Create launch json
-    let mut json_path = profile_dir.clone();
-    json_path.push(format!("{}.json", &profile_name));
-    let mut file = File::create(json_path)?;
+    let mut file = File::create(profile_dir.join(profile_name.clone() + ".json"))?;
 
     // Download launch json
-    let response = reqwest::get(format!("https://meta.quiltmc.org/v3/versions/loader/{}/{}/profile/json", &args.minecraft_version.version, &args.loader_version.version)).await?.text().await?;
+    let mut response = get(format!(
+        "https://meta.quiltmc.org/v3/versions/loader/{}/{}/profile/json",
+        &args.minecraft_version.version, &args.loader_version.version
+    ))
+    .await?
+    .text()
+    .await?;
 
     // Hack-Fix:
-    // Quilt-meta specifies both hashed and intermediary, but providing both to quilt-loader causes it to silently fail remapping.
-    // This really shouldn't be fixed here in the installer, but we need a solution now.
-    let mut json: serde_json::Value = serde_json::from_str(&response).unwrap();
-    let libs = json.as_object_mut().unwrap().get_mut("libraries").unwrap().as_array_mut().unwrap();
-    libs.retain(|lib| !lib.as_object().unwrap().get("name").unwrap().as_str().unwrap().starts_with("org.quiltmc:hashed"));
-    let response = serde_json::to_string(&json).unwrap();
+    // Was fixed in versions above 0.17.7
+    if args.loader_version.version < Version::new(0, 17, 7) {
+        // Quilt-meta specifies both hashed and intermediary, but providing both to quilt-loader causes it to silently fail remapping.
+        // This really shouldn't be fixed here in the installer, but we need a solution now.
+        let mut json: Value = serde_json::from_str(&response).unwrap();
+        let libs = json
+            .as_object_mut()
+            .unwrap()
+            .get_mut("libraries")
+            .unwrap()
+            .as_array_mut()
+            .unwrap();
+        libs.retain(|lib| {
+            !lib.as_object()
+                .unwrap()
+                .get("name")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .starts_with("org.quiltmc:hashed")
+        });
+        response = serde_json::to_string(&json).unwrap();
+    }
     // End of hack-fix
 
-    std::io::copy(&mut response.as_bytes(), &mut file)?;
-
+    io::copy(&mut response.as_bytes(), &mut file)?;
 
     // Generate profile
     if args.generate_profile {
-        let mut profiles_json = args.install_location.clone();
-        profiles_json.push("launcher_profiles.json");
+        let mut file = fs::OpenOptions::new().read(true).write(true).open(
+            args.install_location
+                .join("launcher_profiles")
+                .with_extension("json"),
+        )?;
 
-        let read_file = File::open(&profiles_json)?;
-        let mut profiles: LaunchProfiles = serde_json::from_reader(read_file)?;
+        let mut launcher_profiles: LauncherProfiles = serde_json::from_reader(&file)?;
+        file.set_len(0)?;
+        file.rewind()?;
 
-        let mut new_profile = serde_json::Map::new();
-        new_profile.insert("name".into(), serde_json::Value::String(format!("quilt-loader-{}", &args.minecraft_version.version)));
-        new_profile.insert("type".into(), serde_json::Value::String("custom".into()));
-        new_profile.insert("created".into(), serde_json::Value::String(format!("{:?}", Utc::now())));
-        new_profile.insert("lastVersionId".into(), serde_json::Value::String(profile_name.clone()));
-        new_profile.insert("icon".into(), serde_json::Value::String(format!("data:image/png;base64,{}", base64::encode(ICON))));
-        profiles.profiles.insert(profile_name, serde_json::Value::Object(new_profile));
+        launcher_profiles.profiles.insert(
+            profile_name.clone(),
+            Profile {
+                name: format!("Quilt Loader {}", &args.minecraft_version.version),
+                profile_type: "custom".into(),
+                created: Utc::now(),
+                last_version_id: profile_name,
+                icon: format!("data:image/png;base64,{}", BASE64.encode(crate::ICON)),
+                other: Map::new(),
+            },
+        );
 
-        let write_file = File::create(&profiles_json)?;
-        serde_json::to_writer_pretty(write_file, &profiles)?;
+        serde_json::to_writer_pretty(file, &launcher_profiles)?;
     }
 
     Ok(())
 }
 
 pub async fn install_server(args: ServerInstallation) -> Result<()> {
-    println!("Installing server: {:#?}", args);
+    println!("Installing server\n{:#?}", args);
+    println!("Server installation hasn't been implemented yet!");
     Ok(())
 }
