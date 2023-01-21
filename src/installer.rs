@@ -84,6 +84,7 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
 
     // Resolve profile directory
     let profile_name = format!("quilt-loader-{}-{}", args.loader_version.version, args.minecraft_version.version);
+    let short_profile_name = format!("quilt-loader-{}", &args.minecraft_version.version);
     let mut profile_dir = args.install_location.clone();
     profile_dir.push("versions");
     profile_dir.push(&profile_name);
@@ -129,13 +130,13 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
         let read_file = File::open(&profiles_json)?;
         let mut profiles: LaunchProfiles = serde_json::from_reader(read_file)?;
 
-        let mut new_profile = serde_json::Map::new();
+        let mut new_profile = profiles.profiles[&short_profile_name].as_object().unwrap_or(&serde_json::Map::new()).clone();
         new_profile.insert("name".into(), serde_json::Value::String(format!("quilt-loader-{}", &args.minecraft_version.version)));
         new_profile.insert("type".into(), serde_json::Value::String("custom".into()));
         new_profile.insert("created".into(), serde_json::Value::String(format!("{:?}", Utc::now())));
         new_profile.insert("lastVersionId".into(), serde_json::Value::String(profile_name.clone()));
         new_profile.insert("icon".into(), serde_json::Value::String(format!("data:image/png;base64,{}", base64::encode(ICON))));
-        profiles.profiles.insert(profile_name, serde_json::Value::Object(new_profile));
+        profiles.profiles.insert(short_profile_name, serde_json::Value::Object(new_profile));
 
         let write_file = File::create(&profiles_json)?;
         serde_json::to_writer_pretty(write_file, &profiles)?;
