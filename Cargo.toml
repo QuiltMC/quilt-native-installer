@@ -1,29 +1,28 @@
 [package]
 name = "quilt-installer"
 description = "The installer for quilt-loader"
-
 version = "0.1.1"
 license = "Apache-2.0"
-
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = "1.0"
-async-trait = "0.1"
-base64 = "0.13"
-chrono = "0.4"
-clap = { version = "3.2", features = ["derive"] }
-iced = { version = "0.3", default-features = false, features = ["glow", "tokio"] }
-iced_glow = "0.2"
-native-dialog = "0.6.3"
-png = "0.17.5"
+base64 = "0.21"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.1", features = ["derive"] }
+dark-light = "1.0"
+iced = { version = "0.7", default-features = false, features = ["glow", "tokio"] }
+native-dialog = "0.6"
+png = "0.17"
 reqwest = { version = "0.11", features = ["blocking", "json"] }
+semver = { version = "1.0", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 [profile.release]
+codegen-units = 1
+opt-level = "z"
 strip = true
 lto = true
-opt-level = "z"
