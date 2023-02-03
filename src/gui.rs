@@ -14,6 +14,7 @@ use iced::{
 };
 use native_dialog::FileDialog;
 use png::Transformations;
+use reqwest::Client;
 
 use crate::installer::{
     fetch_loader_versions, fetch_minecraft_versions, install_client, install_server,
@@ -71,6 +72,8 @@ struct State {
     // Progress information
     is_installing: bool,
     progress: f32,
+
+    client: Client,
 }
 
 #[derive(Debug)]
@@ -141,6 +144,9 @@ impl Application for State {
     }
 
     fn new(_: ()) -> (Self, Command<Self::Message>) {
+        let client = Client::builder().user_agent(
+            format!("{}/{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
+        ).build().unwrap();
         (
             State {
                 client_location: get_default_client_directory(),
@@ -148,11 +154,12 @@ impl Application for State {
                 server_location: std::env::current_dir().unwrap_or_default(),
                 download_server_jar: true,
                 generate_launch_script: true,
+                client: client.clone(),
                 ..Default::default()
             },
             Command::batch([
-                Command::perform(fetch_minecraft_versions(), Message::SetMcVersions),
-                Command::perform(fetch_loader_versions(), Message::SetLoaderVersions),
+                Command::perform(fetch_minecraft_versions(client.clone()), Message::SetMcVersions),
+                Command::perform(fetch_loader_versions(client), Message::SetLoaderVersions),
             ]),
         )
     }
@@ -251,7 +258,7 @@ impl Application for State {
 
                 return match self.installation_type {
                     Installation::Client => Command::perform(
-                        install_client(ClientInstallation {
+                        install_client(self.client.clone(), ClientInstallation {
                             minecraft_version: match &self.selected_minecraft_version {
                                 Some(s) => s.clone(),
                                 None => {

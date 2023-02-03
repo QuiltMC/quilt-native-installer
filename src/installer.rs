@@ -8,7 +8,7 @@ use std::{
 use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::{DateTime, Utc};
-use reqwest::get;
+use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -63,15 +63,17 @@ impl std::fmt::Display for LoaderVersion {
     }
 }
 
-pub async fn fetch_minecraft_versions() -> Result<Vec<MinecraftVersion>> {
-    Ok(get("https://meta.quiltmc.org/v3/versions/game")
+pub async fn fetch_minecraft_versions(client: Client) -> Result<Vec<MinecraftVersion>> {
+    Ok(client.get("https://meta.quiltmc.org/v3/versions/game")
+        .send()
         .await?
         .json()
         .await?)
 }
 
-pub async fn fetch_loader_versions() -> Result<Vec<LoaderVersion>> {
-    Ok(get("https://meta.quiltmc.org/v3/versions/loader")
+pub async fn fetch_loader_versions(client: Client) -> Result<Vec<LoaderVersion>> {
+    Ok(client.get("https://meta.quiltmc.org/v3/versions/loader")
+        .send()
         .await?
         .json()
         .await?)
@@ -98,7 +100,7 @@ struct Profile {
     other: Map<String, Value>,
 }
 
-pub async fn install_client(args: ClientInstallation) -> Result<()> {
+pub async fn install_client(client: Client, args: ClientInstallation) -> Result<()> {
     println!("Installing client: {:#?}", args);
 
     // Verify install location
@@ -128,10 +130,11 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
     let mut file = File::create(profile_dir.join(profile_name.clone() + ".json"))?;
 
     // Download launch json
-    let mut response = get(format!(
+    let mut response = client.get(format!(
         "https://meta.quiltmc.org/v3/versions/loader/{}/{}/profile/json",
         &args.minecraft_version.version, &args.loader_version.version
     ))
+    .send()
     .await?
     .text()
     .await?;
