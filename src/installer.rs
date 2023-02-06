@@ -24,7 +24,7 @@ pub enum Installation {
 pub struct ClientInstallation {
     pub minecraft_version: MinecraftVersion,
     pub loader_version: LoaderVersion,
-    pub install_location: PathBuf,
+    pub install_dir: PathBuf,
     pub generate_profile: bool,
 }
 
@@ -98,20 +98,40 @@ struct Profile {
     other: Map<String, Value>,
 }
 
+
+#[cfg(target_os = "windows")]
+pub fn get_default_client_directory() -> PathBuf {
+    PathBuf::from(std::env::var("APPDATA").unwrap()).join(".minecraft")
+}
+
+#[cfg(target_os = "macos")]
+pub fn get_default_client_directory() -> PathBuf {
+    PathBuf::from(std::env::var("HOME").unwrap())
+        .join("Library")
+        .join("Application Support")
+        .join("minecraft")
+}
+
+#[cfg(target_os = "linux")]
+pub fn get_default_client_directory() -> PathBuf {
+    PathBuf::from(std::env::var("HOME").unwrap()).join(".minecraft")
+}
+
 pub async fn install_client(args: ClientInstallation) -> Result<()> {
-    println!("Installing client: {:#?}", args);
+    // TODO: make pretty
+    println!("Installing client: {args:#?}");
 
     // Verify install location
-    if !args.install_location.join("launcher_profiles.json").exists() {
+    if !args.install_dir.join("launcher_profiles.json").exists() {
         return Err(anyhow!(
             "{} is not a valid installation directory",
-            args.install_location.display(),
+            args.install_dir.display(),
         ));
     }
 
     // Resolve profile directory
     let profile_name = format!("quilt-loader-{}-{}", args.loader_version, args.minecraft_version);
-    let profile_dir = args.install_location.join("versions").join(&profile_name);
+    let profile_dir = args.install_dir.join("versions").join(&profile_name);
 
     // Delete existing profile
     if profile_dir.exists() {
@@ -167,7 +187,7 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
     // Generate profile
     if args.generate_profile {
         let mut file = fs::OpenOptions::new().read(true).write(true).open(
-            args.install_location
+            args.install_dir
                 .join("launcher_profiles")
                 .with_extension("json"),
         )?;
@@ -191,11 +211,12 @@ pub async fn install_client(args: ClientInstallation) -> Result<()> {
         serde_json::to_writer_pretty(file, &launcher_profiles)?;
     }
 
+    println!("Client installed successfully.");
     Ok(())
 }
 
 pub async fn install_server(args: ServerInstallation) -> Result<()> {
-    println!("Installing server\n{:#?}", args);
+    println!("Installing server\n{args:#?}");
     println!("Server installation hasn't been implemented yet!");
-    Ok(())
+    Err(anyhow!("Server installation hasn't been implemented!"))
 }

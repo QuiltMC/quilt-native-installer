@@ -12,8 +12,9 @@ use iced::{
     widget::{Button, Checkbox, Column, PickList, ProgressBar, Row, Rule, Text, TextInput},
     Application, Command, Element, Length, Settings,
 };
-use native_dialog::FileDialog;
+use native_dialog::{FileDialog, MessageDialog, MessageType};
 use png::Transformations;
+use crate::installer;
 
 use crate::installer::{
     fetch_loader_versions, fetch_minecraft_versions, install_client, install_server,
@@ -108,24 +109,6 @@ impl From<Message> for Command<Message> {
     }
 }
 
-#[cfg(target_os = "windows")]
-fn get_default_client_directory() -> PathBuf {
-    PathBuf::from(std::env::var("APPDATA").unwrap()).join(".minecraft")
-}
-
-#[cfg(target_os = "macos")]
-fn get_default_client_directory() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap())
-        .join("Library")
-        .join("Application Support")
-        .join("minecraft")
-}
-
-#[cfg(target_os = "linux")]
-fn get_default_client_directory() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap()).join(".minecraft")
-}
-
 impl Application for State {
     type Message = Message;
     type Executor = executor::Default;
@@ -143,7 +126,7 @@ impl Application for State {
     fn new(_: ()) -> (Self, Command<Self::Message>) {
         (
             State {
-                client_location: get_default_client_directory(),
+                client_location: installer::get_default_client_directory(),
                 generate_profile: true,
                 server_location: std::env::current_dir().unwrap_or_default(),
                 download_server_jar: true,
@@ -268,7 +251,7 @@ impl Application for State {
                                         .into()
                                 }
                             },
-                            install_location: self.client_location.clone(),
+                            install_dir: self.client_location.clone(),
                             generate_profile: self.generate_profile,
                         }),
                         Message::DoneInstalling,
@@ -308,14 +291,22 @@ impl Application for State {
                 }
             }
             Message::Error(error) => {
-                eprintln!("{:?}", error);
+                self.progress = 0.0;
+
+                MessageDialog::new()
+                    .set_title("Quilt Installer Error")
+                    .set_text(format!("{error}").as_str())
+                    .set_type(MessageType::Error)
+                    .show_alert().unwrap();
+
+                eprintln!("{error:?}");
             }
         }
 
         Command::none()
     }
 
-    fn view(&self) -> iced::Element<'_, Self::Message> {
+    fn view(&self) -> Element<'_, Self::Message> {
         let installation_label = Text::new("Installation:").width(140.into());
         let installation_client = Radio::new(
             Installation::Client,
