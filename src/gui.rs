@@ -96,10 +96,12 @@ enum Interaction {
     SelectMcVersion(MinecraftVersion),
     SetShowSnapshots(bool),
     SetShowBetas(bool),
+    #[allow(dead_code)]
     GenerateLaunchScript(bool),
     GenerateProfile(bool),
     ChangeServerLocation(PathBuf),
     BrowseServerLocation,
+    #[allow(dead_code)]
     DownloadServerJar(bool),
 }
 
@@ -431,21 +433,21 @@ impl Application for State {
             .padding(5);
 
         let server_options_label = Text::new("Options:").width(Length::Fixed(140.0));
-        let download_server_jar = Checkbox::new(
-            "Download server jar",
-            self.download_server_jar,
-            Interaction::DownloadServerJar,
-        );
-        let generate_launch_script = Checkbox::new(
-            "Generate launch script",
-            self.generate_launch_script,
-            Interaction::GenerateLaunchScript,
-        );
+        // let download_server_jar = Checkbox::new(
+        //     "Download server jar",
+        //     self.download_server_jar,
+        //     Interaction::DownloadServerJar,
+        // );
+        // let generate_launch_script = Checkbox::new(
+        //     "Generate launch script",
+        //     self.generate_launch_script,
+        //     Interaction::GenerateLaunchScript,
+        // );
         let server_options_row = Row::new()
             .push(server_options_label)
-            .push(download_server_jar)
-            .push(Space::new(Length::Fixed(35.0), Length::Fixed(0.0)))
-            .push(generate_launch_script)
+            //.push(download_server_jar)
+            //.push(Space::new(Length::Fixed(35.0), Length::Fixed(0.0)))
+            //.push(generate_launch_script)
             .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);

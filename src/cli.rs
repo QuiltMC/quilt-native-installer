@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use crate::installer;
-use crate::installer::{ClientInstallation, LoaderVersion, MinecraftVersion};
+use crate::installer::{ClientInstallation, LoaderVersion, MinecraftVersion, ServerInstallation};
 
 #[derive(Parser)]
 #[clap(about, version)]
@@ -25,34 +25,38 @@ pub enum InstallSubcommands {
     Client {
         #[arg(short='M',long)]
         minecraft_version: Option<String>,
-
         #[arg(short='L',long)]
         loader_version: Option<String>,
+        #[arg(short, long, value_name = "'.minecraft' DIRECTORY")]
+        install_dir: Option<PathBuf>,
+
         #[arg(short='s',long)]
         snapshot: bool,
         #[arg(short='b',long)]
         loader_beta: bool,
 
         #[arg(short, long)]
-        no_profile: bool,
-        #[arg(short, long, value_name = "'.minecraft' DIRECTORY")]
-        install_dir: Option<PathBuf>
+        no_profile: bool
     },
     Server {
         #[arg(short='M',long)]
         minecraft_version: Option<String>,
         #[arg(short='L',long)]
         loader_version: Option<String>,
+        #[arg(short, long)]
+        install_dir: PathBuf,
 
-        #[arg(short, long)]
-        create_scripts: bool,
-        #[arg(short, long)]
-        download_server: bool,
-        #[arg(short, long)]
-        install_dir: PathBuf
+        #[arg(short='s',long)]
+        snapshot: bool,
+        #[arg(short='b',long)]
+        loader_beta: bool,
+
+        // #[arg(short, long)]
+        // create_scripts: bool,
+        // #[arg(short, long)]
+        // download_server: bool
     }
 }
-
 
 pub async fn cli(args: SubCommands) -> anyhow::Result<()> {
     match args {
@@ -62,14 +66,25 @@ pub async fn cli(args: SubCommands) -> anyhow::Result<()> {
                         let (mc_version_to_install, loader_version_to_install) =  get_versions(minecraft_version, loader_version, snapshot, loader_beta).await?;
                         let install_dir = install_dir.unwrap_or_else(installer::get_default_client_directory);
 
-                            installer::install_client(ClientInstallation {
-                                minecraft_version: mc_version_to_install,
-                                loader_version: loader_version_to_install,
-                                install_dir,
-                                generate_profile: !no_profile}).await?;
-
+                        installer::install_client(ClientInstallation {
+                            minecraft_version: mc_version_to_install,
+                            loader_version: loader_version_to_install,
+                            install_dir,
+                            generate_profile: !no_profile
+                        }).await?;
                     }
-                    InstallSubcommands::Server { .. } => {}
+
+                    InstallSubcommands::Server { minecraft_version, loader_version, install_dir, snapshot, loader_beta, /*create_scripts, download_server*/ } => {
+                        let (mc_version_to_install, loader_version_to_install) = get_versions(minecraft_version, loader_version, snapshot, loader_beta).await?;
+
+                        installer::install_server(ServerInstallation {
+                            minecraft_version: mc_version_to_install,
+                            loader_version: loader_version_to_install,
+                            install_location: install_dir,
+                            download_jar: false,
+                            generate_script: false
+                        }).await?;
+                    }
                 }
             }
         }
