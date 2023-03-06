@@ -274,8 +274,7 @@ pub async fn install_server(args: ServerInstallation) -> Result<()> {
     }).collect();
 
     let library_paths: Vec<PathBuf> = try_join_all(library_futures).await?;
-    let mut launch_jar_path = args.install_location.clone();
-    launch_jar_path.push("quilt-server-launch.jar");
+    let launch_jar_path = args.install_location.clone().join("quilt-server-launch.jar");
 
     create_launch_jar(launch_jar_path, json.get("launcherMainClass").unwrap().as_str().unwrap().to_string(), library_paths).await?;
 
@@ -302,7 +301,7 @@ pub async fn install_server(args: ServerInstallation) -> Result<()> {
 
 async fn download_library(dir: &Path, name: String, maven: String) -> Result<PathBuf> {
     let response = get(maven_to_url(maven, &name));
-    let mut file_path = dir.to_path_buf().join(split_artifact(&name));
+    let file_path = dir.to_path_buf().join(split_artifact(&name));
 
 
     let _ = fs::create_dir_all(file_path.parent().unwrap());
@@ -314,12 +313,12 @@ async fn download_library(dir: &Path, name: String, maven: String) -> Result<Pat
     Ok(file_path)
 }
 
-fn maven_to_url(maven_url: String, artifact_notation: &String) -> String {
+fn maven_to_url(maven_url: String, artifact_notation: &str) -> String {
     return maven_url + split_artifact(artifact_notation).as_str();
 }
 
-fn split_artifact(artifact_notation: &String) -> String {
-    let parts: Vec<&str> = artifact_notation.splitn(3, ":").collect();
+fn split_artifact(artifact_notation: &str) -> String {
+    let parts: Vec<&str> = artifact_notation.splitn(3, ':').collect();
 
     parts[0].replace('.', "/") + // group
         "/" + parts[1] + // artifact name
