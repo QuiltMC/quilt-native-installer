@@ -96,7 +96,6 @@ enum Interaction {
     SelectMcVersion(MinecraftVersion),
     SetShowSnapshots(bool),
     SetShowBetas(bool),
-    #[allow(dead_code)]
     GenerateLaunchScript(bool),
     GenerateProfile(bool),
     ChangeServerLocation(PathBuf),
@@ -438,16 +437,16 @@ impl Application for State {
         //     self.download_server_jar,
         //     Interaction::DownloadServerJar,
         // );
-        // let generate_launch_script = Checkbox::new(
-        //     "Generate launch script",
-        //     self.generate_launch_script,
-        //     Interaction::GenerateLaunchScript,
-        // );
+        let generate_launch_script = Checkbox::new(
+            "Generate launch script",
+            self.generate_launch_script,
+            Interaction::GenerateLaunchScript,
+        );
         let server_options_row = Row::new()
             .push(server_options_label)
             //.push(download_server_jar)
             //.push(Space::new(Length::Fixed(35.0), Length::Fixed(0.0)))
-            //.push(generate_launch_script)
+            .push(generate_launch_script)
             .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);

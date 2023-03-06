@@ -4,6 +4,7 @@ use std::{
     io::{self, Seek, Write},
     path::PathBuf,
 };
+use std::path::Path;
 
 use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
@@ -222,6 +223,26 @@ pub fn hack_fix(response: String, loader_version: LoaderVersion) -> String {
     response
 }
 
+const RUN_SH_JAVA_17: &str =
+    r#"#!/usr/bin/env sh
+
+# -Xmx and -Xms configure the maximum and minimum amount of RAM your server can use, respectively.
+# It is almost always recommended for them to be equal.
+# A good value for a modded server is 4G, but small, lightly modded servers will run fine with 2 or 3.
+# ***If you're having trouble launching the game due to "Unrecognized VM option", make sure you're using Java 17, or remove the arguments beginning with -XX***
+
+java -jar quilt-server-launch.jar -Xmx2G -Xms2G -XX:+UseCMoveUnconditionally -XX:+UseShenandoahGC
+"#;
+
+const RUN_BAT_JAVA_17: &str =
+    r#"REM -Xmx and -Xms configure the maximum and minimum amount of RAM your server can use, respectively.
+REM It is almost always recommended for them to be equal.
+REM A good value for a modded server is 4G, but small, lightly modded servers will run fine with 2 or 3.
+
+# ***If you're having trouble launching the game due to "Unrecognized VM option", make sure you're using Java 17, or remove the arguments beginning with -XX***
+java -jar quilt-server-launch.jar -Xmx2G -Xms2G -XX:+UseCMoveUnconditionally -XX:+UseShenandoahGC
+"#;
+
 pub async fn install_server(args: ServerInstallation) -> Result<()> {
     println!("Installing server\n{args:#?}");
 
@@ -242,8 +263,7 @@ pub async fn install_server(args: ServerInstallation) -> Result<()> {
     // first, read libs
     let libraries = json.get("libraries").unwrap().as_array().unwrap();
 
-    let mut lib_path = args.install_location.clone();
-    lib_path.push("libraries/");
+    let lib_path = args.install_location.clone().join("libraries/");
 
     let library_futures: Vec<_> = libraries.iter().map(|lib| {
         let lib = lib.as_object().unwrap();
@@ -259,15 +279,31 @@ pub async fn install_server(args: ServerInstallation) -> Result<()> {
 
     create_launch_jar(launch_jar_path, json.get("launcherMainClass").unwrap().as_str().unwrap().to_string(), library_paths).await?;
 
+    if args.generate_script {
+        let bat = args.install_location.clone().join("run.bat");
+        let sh = args.install_location.clone().join("run.sh");
+
+        if !bat.exists() {
+            tokio::io::copy(&mut io::Cursor::new(RUN_BAT_JAVA_17), &mut tokio::fs::File::create(bat).await?).await?;
+        }
+
+        if !sh.exists() {
+            let mut file = tokio::fs::File::create(&sh).await?;
+            tokio::io::copy(&mut io::Cursor::new(RUN_SH_JAVA_17), &mut file).await?;
+
+            // mark file as executable. rust seems to generate files as 644 so this shouldn't ever cause
+            #[cfg(target_family = "unix")]
+            tokio::fs::set_permissions(&sh, std::os::unix::fs::PermissionsExt::from_mode(0o755)).await?;
+        }
+    }
 
     Ok(())
 }
 
-async fn download_library(dir: &PathBuf, name: String, maven: String) -> Result<PathBuf> {
+async fn download_library(dir: &Path, name: String, maven: String) -> Result<PathBuf> {
     let response = get(maven_to_url(maven, &name));
-    let mut file_path = dir.clone();
+    let mut file_path = dir.to_path_buf().join(split_artifact(&name));
 
-    file_path.push(split_artifact(&name));
 
     let _ = fs::create_dir_all(file_path.parent().unwrap());
     let mut file = tokio::fs::File::create(&file_path).await?;
@@ -295,25 +331,30 @@ fn split_artifact(artifact_notation: &String) -> String {
 
 async fn create_launch_jar(path: PathBuf, main_class: String, libraries: Vec<PathBuf>) -> Result<()> {
     if path.try_exists()? {
-        fs::remove_file(&path).expect("Failed to delete old launch jar");
+        tokio::fs::remove_file(&path).await.expect("Failed to delete old launch jar");
     }
 
     let parent_dir = path.parent().unwrap();
-    let file = File::create(&path)?;
-    let mut zip = zip::ZipWriter::new(file);
-
-    // TODO: there's probably a more efficient way to write this, but does it really matter?
-    let options = zip::write::FileOptions::default().compression_method(CompressionMethod::Stored);
-    zip.start_file("META-INF/MANIFEST.MF", options)?;
-    // create class-path entry
     let mut cp: String = String::new();
+
+    cp.push_str("Class-Path:");
 
     for x in libraries {
         cp.push(' ');
         cp.push_str(x.strip_prefix(parent_dir)?.as_os_str().to_str().unwrap());
     }
 
-    zip.write_all(format!("Manifest-Version: 1.0\nMain-Class: {main_class}\nClass-Path:{cp}").as_bytes())?;
+    // MANIFEST.MF has a weird line length limit.
+    let cp = cp.as_bytes().chunks(71).collect::<Vec<&[u8]>>().join("\r\n ".as_bytes());
+
+    let file = File::create(&path)?;
+    let mut zip = zip::ZipWriter::new(file);
+    let options = zip::write::FileOptions::default().compression_method(CompressionMethod::DEFLATE);
+    zip.start_file("META-INF/MANIFEST.MF", options)?;
+    zip.write_all(format!("Manifest-Version: 1.0\r\nMain-Class: {main_class}\r\n").as_bytes())?;
+    zip.write_all(&cp)?;
+    zip.write_all("\r\n".as_bytes())?;
     zip.finish()?;
+
     Ok(())
 }

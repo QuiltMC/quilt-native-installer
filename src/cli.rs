@@ -51,8 +51,8 @@ pub enum InstallSubcommands {
         #[arg(short='b',long)]
         loader_beta: bool,
 
-        // #[arg(short, long)]
-        // create_scripts: bool,
+        #[arg(short, long)]
+        create_scripts: bool,
         // #[arg(short, long)]
         // download_server: bool
     }
@@ -74,7 +74,7 @@ pub async fn cli(args: SubCommands) -> anyhow::Result<()> {
                         }).await?;
                     }
 
-                    InstallSubcommands::Server { minecraft_version, loader_version, install_dir, snapshot, loader_beta, /*create_scripts, download_server*/ } => {
+                    InstallSubcommands::Server { minecraft_version, loader_version, install_dir, snapshot, loader_beta, create_scripts, /*download_server*/ } => {
                         let (mc_version_to_install, loader_version_to_install) = get_versions(minecraft_version, loader_version, snapshot, loader_beta).await?;
 
                         installer::install_server(ServerInstallation {
@@ -82,7 +82,7 @@ pub async fn cli(args: SubCommands) -> anyhow::Result<()> {
                             loader_version: loader_version_to_install,
                             install_location: install_dir,
                             download_jar: false,
-                            generate_script: false
+                            generate_script: create_scripts
                         }).await?;
                     }
                 }
