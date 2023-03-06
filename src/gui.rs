@@ -100,6 +100,7 @@ enum Interaction {
     GenerateProfile(bool),
     ChangeServerLocation(PathBuf),
     BrowseServerLocation,
+    #[allow(dead_code)]
     DownloadServerJar(bool),
 }
 
@@ -124,11 +125,13 @@ impl Application for State {
     }
 
     fn new(_: ()) -> (Self, Command<Self::Message>) {
+        let mut server_location = std::env::current_dir().unwrap_or_default();
+        server_location.push("quilt_server");
         (
             State {
                 client_location: installer::get_default_client_directory(),
                 generate_profile: true,
-                server_location: std::env::current_dir().unwrap_or_default(),
+                server_location,
                 download_server_jar: true,
                 generate_launch_script: true,
                 ..Default::default()
@@ -307,7 +310,7 @@ impl Application for State {
     }
 
     fn view(&self) -> Element<'_, Self::Message> {
-        let installation_label = Text::new("Installation:").width(140.into());
+        let installation_label = Text::new("Installation:").width(Length::Fixed(140.0));
         let installation_client = Radio::new(
             Installation::Client,
             "Client",
@@ -329,7 +332,7 @@ impl Application for State {
             .spacing(50)
             .padding(5);
 
-        let minecraft_version_label = Text::new("Minecraft version:").width(140.into());
+        let minecraft_version_label = Text::new("Minecraft version:").width(Length::Fixed(140.0));
         let minecraft_version_list = PickList::new(
             Cow::from_iter(
                 self.minecraft_versions
@@ -340,7 +343,7 @@ impl Application for State {
             self.selected_minecraft_version.clone(),
             Interaction::SelectMcVersion,
         )
-        .width(200.into());
+        .width(Length::Fixed(200.0));
         let enable_snapshots = Checkbox::new(
             "Show snapshots",
             self.show_snapshots,
@@ -349,14 +352,14 @@ impl Application for State {
         let mc_row = Row::new()
             .push(minecraft_version_label)
             .push(minecraft_version_list)
-            .push(Space::new(20.into(), 0.into()))
+            .push(Space::new(Length::Fixed(20.0), Length::Fixed(0.0)))
             .push(enable_snapshots)
             .width(Length::Fill)
             .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
-        let loader_version_label = Text::new("Loader version:").width(140.into());
+        let loader_version_label = Text::new("Loader version:").width(Length::Fixed(140.0));
         let loader_version_list = PickList::new(
             Cow::from_iter(
                 self.loader_versions
@@ -367,19 +370,19 @@ impl Application for State {
             self.selected_loader_version.clone(),
             Interaction::SelectLoaderVersion,
         )
-        .width(200.into());
+        .width(Length::Fixed(200.0));
         let enable_betas = Checkbox::new("Show betas", self.show_betas, Interaction::SetShowBetas);
         let loader_row = Row::new()
             .push(loader_version_label)
             .push(loader_version_list)
-            .push(Space::new(20.into(), 0.into()))
+            .push(Space::new(Length::Fixed(20.0), Length::Fixed(0.0)))
             .push(enable_betas)
             .width(Length::Fill)
             .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
-        let client_location_label = Text::new("Directory:").width(140.into());
+        let client_location_label = Text::new("Directory:").width(Length::Fixed(140.0));
         let client_location_input = TextInput::new(
             "Install location",
             self.client_location.to_str().unwrap(),
@@ -397,7 +400,7 @@ impl Application for State {
             .spacing(5)
             .padding(5);
 
-        let client_options_label = Text::new("Options:").width(140.into());
+        let client_options_label = Text::new("Options:").width(Length::Fixed(140.0));
         let create_profile = Checkbox::new(
             "Generate profile",
             self.generate_profile,
@@ -410,7 +413,7 @@ impl Application for State {
             .spacing(5)
             .padding(5);
 
-        let server_location_label = Text::new("Directory:").width(140.into());
+        let server_location_label = Text::new("Directory:").width(Length::Fixed(140.0));
         let server_location_input = TextInput::new(
             "Install location",
             self.server_location.to_str().unwrap(),
@@ -428,12 +431,12 @@ impl Application for State {
             .spacing(5)
             .padding(5);
 
-        let server_options_label = Text::new("Options:").width(140.into());
-        let download_server_jar = Checkbox::new(
-            "Download server jar",
-            self.download_server_jar,
-            Interaction::DownloadServerJar,
-        );
+        let server_options_label = Text::new("Options:").width(Length::Fixed(140.0));
+        // let download_server_jar = Checkbox::new(
+        //     "Download server jar",
+        //     self.download_server_jar,
+        //     Interaction::DownloadServerJar,
+        // );
         let generate_launch_script = Checkbox::new(
             "Generate launch script",
             self.generate_launch_script,
@@ -441,8 +444,8 @@ impl Application for State {
         );
         let server_options_row = Row::new()
             .push(server_options_label)
-            .push(download_server_jar)
-            .push(Space::new(35.into(), 0.into()))
+            //.push(download_server_jar)
+            //.push(Space::new(Length::Fixed(35.0), Length::Fixed(0.0)))
             .push(generate_launch_script)
             .align_items(Alignment::Center)
             .spacing(5)
