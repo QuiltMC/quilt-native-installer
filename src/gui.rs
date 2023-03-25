@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 use std::path::PathBuf;
 
+use crate::installer;
 use anyhow::{anyhow, Error, Result};
 use iced::widget::{Radio, Space};
 use iced::window::{Icon, Settings as WindowSettings};
@@ -12,7 +13,7 @@ use iced::{
     widget::{Button, Checkbox, Column, PickList, ProgressBar, Row, Rule, Text, TextInput},
     Application, Command, Element, Length, Settings,
 };
-use native_dialog::FileDialog;
+use native_dialog::{FileDialog, MessageDialog, MessageType};
 use png::Transformations;
 use reqwest::Client;
 
@@ -111,24 +112,6 @@ impl From<Message> for Command<Message> {
     }
 }
 
-#[cfg(target_os = "windows")]
-fn get_default_client_directory() -> PathBuf {
-    PathBuf::from(std::env::var("APPDATA").unwrap()).join(".minecraft")
-}
-
-#[cfg(target_os = "macos")]
-fn get_default_client_directory() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap())
-        .join("Library")
-        .join("Application Support")
-        .join("minecraft")
-}
-
-#[cfg(target_os = "linux")]
-fn get_default_client_directory() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap()).join(".minecraft")
-}
-
 impl Application for State {
     type Message = Message;
     type Executor = executor::Default;
@@ -144,12 +127,17 @@ impl Application for State {
     }
 
     fn new(_: ()) -> (Self, Command<Self::Message>) {
-        let client = Client::builder().user_agent(
-            format!("{}/{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
-        ).build().unwrap();
+        let client = Client::builder()
+            .user_agent(format!(
+                "{}/{}",
+                env!("CARGO_PKG_NAME"),
+                env!("CARGO_PKG_VERSION")
+            ))
+            .build()
+            .unwrap();
         (
             State {
-                client_location: get_default_client_directory(),
+                client_location: installer::get_default_client_directory(),
                 generate_profile: true,
                 server_location: std::env::current_dir().unwrap_or_default(),
                 download_server_jar: true,
@@ -158,7 +146,10 @@ impl Application for State {
                 ..Default::default()
             },
             Command::batch([
-                Command::perform(fetch_minecraft_versions(client.clone()), Message::SetMcVersions),
+                Command::perform(
+                    fetch_minecraft_versions(client.clone()),
+                    Message::SetMcVersions,
+                ),
                 Command::perform(fetch_loader_versions(client), Message::SetLoaderVersions),
             ]),
         )
@@ -258,26 +249,31 @@ impl Application for State {
 
                 return match self.installation_type {
                     Installation::Client => Command::perform(
-                        install_client(self.client.clone(), ClientInstallation {
-                            minecraft_version: match &self.selected_minecraft_version {
-                                Some(s) => s.clone(),
-                                None => {
-                                    return Message::Error(anyhow!(
-                                        "No Minecraft version selected!"
-                                    ))
-                                    .into()
-                                }
-                            },
-                            loader_version: match &self.selected_loader_version {
-                                Some(s) => s.clone(),
-                                None => {
-                                    return Message::Error(anyhow!("No Loader version selected!"))
+                        install_client(
+                            self.client.clone(),
+                            ClientInstallation {
+                                minecraft_version: match &self.selected_minecraft_version {
+                                    Some(s) => s.clone(),
+                                    None => {
+                                        return Message::Error(anyhow!(
+                                            "No Minecraft version selected!"
+                                        ))
                                         .into()
-                                }
+                                    }
+                                },
+                                loader_version: match &self.selected_loader_version {
+                                    Some(s) => s.clone(),
+                                    None => {
+                                        return Message::Error(anyhow!(
+                                            "No Loader version selected!"
+                                        ))
+                                        .into()
+                                    }
+                                },
+                                install_dir: self.client_location.clone(),
+                                generate_profile: self.generate_profile,
                             },
-                            install_location: self.client_location.clone(),
-                            generate_profile: self.generate_profile,
-                        }),
+                        ),
                         Message::DoneInstalling,
                     ),
                     Installation::Server => Command::perform(
@@ -315,15 +311,24 @@ impl Application for State {
                 }
             }
             Message::Error(error) => {
-                eprintln!("{:?}", error);
+                self.progress = 0.0;
+
+                MessageDialog::new()
+                    .set_title("Quilt Installer Error")
+                    .set_text(format!("{error}").as_str())
+                    .set_type(MessageType::Error)
+                    .show_alert()
+                    .unwrap();
+
+                eprintln!("{error:?}");
             }
         }
 
         Command::none()
     }
 
-    fn view(&self) -> iced::Element<'_, Self::Message> {
-        let installation_label = Text::new("Installation:").width(140);
+    fn view(&self) -> Element<'_, Self::Message> {
+        let installation_label = Text::new("Installation:").width(140.into());
         let installation_client = Radio::new(
             Installation::Client,
             "Client",

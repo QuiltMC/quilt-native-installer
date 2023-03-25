@@ -12,13 +12,10 @@ fn main() -> anyhow::Result<()> {
     let args = cli::Args::parse();
 
     if let Some(subcommand) = args.subcommand {
-        match subcommand {
-            cli::SubCommands::Client => println!("Installing client..."),
-            cli::SubCommands::Server => println!("Installing server..."),
-        }
-        println!("The CLI hasn't been implemented yet!");
+        tokio::runtime::Runtime::new().unwrap().block_on(async {cli::cli(subcommand).await.expect("Installation failed! Exiting.")});
     } else {
-        gui::run()?;
+        println!("quilt-installer can also be used as a cli! Run with --help for more information.");
+        gui::run()?
     }
 
     Ok(())
