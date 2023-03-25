@@ -115,7 +115,7 @@ impl From<Message> for Command<Message> {
 impl Application for State {
     type Message = Message;
     type Executor = executor::Default;
-    type Flags = ();
+    type Flags = Client;
     type Theme = Theme;
 
     fn theme(&self) -> Self::Theme {
@@ -126,15 +126,7 @@ impl Application for State {
         }
     }
 
-    fn new(_: ()) -> (Self, Command<Self::Message>) {
-        let client = Client::builder()
-            .user_agent(format!(
-                "{}/{}",
-                env!("CARGO_PKG_NAME"),
-                env!("CARGO_PKG_VERSION")
-            ))
-            .build()
-            .unwrap();
+    fn new(client: Client) -> (Self, Command<Self::Message>) {
         (
             State {
                 client_location: installer::get_default_client_directory(),
@@ -146,10 +138,7 @@ impl Application for State {
                 ..Default::default()
             },
             Command::batch([
-                Command::perform(
-                    fetch_minecraft_versions(client.clone()),
-                    Message::SetMcVersions,
-                ),
+                Command::perform(fetch_minecraft_versions(client.clone()), Message::SetMcVersions),
                 Command::perform(fetch_loader_versions(client), Message::SetLoaderVersions),
             ]),
         )
@@ -328,7 +317,7 @@ impl Application for State {
     }
 
     fn view(&self) -> Element<'_, Self::Message> {
-        let installation_label = Text::new("Installation:").width(140.into());
+        let installation_label = Text::new("Installation:").width(140);
         let installation_client = Radio::new(
             Installation::Client,
             "Client",
