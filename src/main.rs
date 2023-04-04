@@ -23,11 +23,8 @@ fn main() -> anyhow::Result<()> {
     if let Some(subcommand) = args.subcommand {
         tokio::runtime::Runtime::new()
             .unwrap()
-            .block_on(async move {
-                cli::cli(client, subcommand)
-                    .await
-                    .context("Installation failed!")
-            })
+            .block_on(cli::cli(client, subcommand))
+            .context("Installation failed!")
     } else {
         println!(
             "quilt-installer can also be used as a CLI! Run with --help for more information."
