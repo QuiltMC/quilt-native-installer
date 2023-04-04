@@ -26,9 +26,7 @@ fn main() -> anyhow::Result<()> {
             .block_on(cli::cli(client, subcommand))
             .context("Installation failed!")
     } else {
-        println!(
-            "quilt-installer can also be used as a CLI! Run with --help for more information."
-        );
+        println!("quilt-installer can also be used as a CLI! Run with --help for more information");
         gui::run(client)
     }
 }
