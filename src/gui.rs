@@ -22,7 +22,7 @@ use crate::installer::{
     ClientInstallation, Installation, LoaderVersion, MinecraftVersion, ServerInstallation,
 };
 
-pub fn run() -> Result<()> {
+pub fn run(client: Client) -> Result<()> {
     State::run(Settings {
         window: WindowSettings {
             size: (600, 300),
@@ -30,6 +30,7 @@ pub fn run() -> Result<()> {
             icon: Some(create_icon()?),
             ..Default::default()
         },
+        flags: client,
         ..Default::default()
     })?;
 

@@ -1,5 +1,6 @@
 #![windows_subsystem = "windows"]
 
+use anyhow::Context;
 use clap::Parser;
 
 mod cli;
@@ -25,12 +26,12 @@ fn main() -> anyhow::Result<()> {
             .block_on(async move {
                 cli::cli(client, subcommand)
                     .await
-                    .expect("Installation failed! Exiting.")
-            });
+                    .context("Installation failed!")
+            })
     } else {
-        println!("quilt-installer can also be used as a CLI! Run with --help for more information.");
-        gui::run()?
+        println!(
+            "quilt-installer can also be used as a CLI! Run with --help for more information."
+        );
+        gui::run(client)
     }
-
-    Ok(())
 }
