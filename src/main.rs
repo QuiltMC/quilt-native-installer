@@ -12,9 +12,9 @@ const ICON: &[u8] = include_bytes!("../quilt.png");
 fn main() -> anyhow::Result<()> {
     let args = cli::Args::parse();
     let client = reqwest::Client::builder()
-        .user_agent(format!(
-            "{}/{}",
+        .user_agent(concat!(
             env!("CARGO_PKG_NAME"),
+            '/',
             env!("CARGO_PKG_VERSION"),
         ))
         .build()
