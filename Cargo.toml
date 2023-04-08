@@ -13,6 +13,7 @@ base64 = "0.21"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.1", features = ["derive"] }
 dark-light = "1.0"
+derive_more = "0.99"
 iced = { version = "0.8", default-features = false, features = ["wgpu", "tokio"] }
 # TODO: if we keep using this lib into the future, maybe we just fork it as Quilt?
 native-dialog = { git = "https://github.com/TheGlitch76/native-dialog-rs", features = [

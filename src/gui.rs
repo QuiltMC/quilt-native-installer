@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 use std::path::PathBuf;
 
-use crate::installer;
 use anyhow::{anyhow, Error, Result};
 use iced::widget::{Radio, Space};
 use iced::window::{Icon, Settings as WindowSettings};
@@ -18,8 +17,9 @@ use png::Transformations;
 use reqwest::Client;
 
 use crate::installer::{
-    fetch_loader_versions, fetch_minecraft_versions, install_client, install_server,
-    ClientInstallation, Installation, LoaderVersion, MinecraftVersion, ServerInstallation,
+    fetch_loader_versions, fetch_minecraft_versions, get_default_client_directory, install_client,
+    install_server, ClientInstallation, Installation, LoaderVersion, MinecraftVersion,
+    ServerInstallation,
 };
 
 pub fn run(client: Client) -> Result<()> {
@@ -44,8 +44,7 @@ fn create_icon() -> Result<Icon> {
     let mut buffer = vec![0; reader.output_buffer_size()];
     let info = reader.next_frame(&mut buffer)?;
     let bytes = &buffer[..info.buffer_size()];
-    let icon = Icon::from_rgba(bytes.to_vec(), info.width, info.height)?;
-    Ok(icon)
+    Ok(Icon::from_rgba(bytes.to_vec(), info.width, info.height)?)
 }
 
 #[derive(Debug, Default)]
@@ -75,6 +74,7 @@ struct State {
     is_installing: bool,
     progress: f32,
 
+    // HTTP reqwest client
     client: Client,
 }
 
@@ -130,7 +130,7 @@ impl Application for State {
     fn new(client: Client) -> (Self, Command<Self::Message>) {
         (
             State {
-                client_location: installer::get_default_client_directory(),
+                client_location: get_default_client_directory(),
                 generate_profile: true,
                 server_location: std::env::current_dir().unwrap_or_default(),
                 download_server_jar: true,
@@ -139,7 +139,10 @@ impl Application for State {
                 ..Default::default()
             },
             Command::batch([
-                Command::perform(fetch_minecraft_versions(client.clone()), Message::SetMcVersions),
+                Command::perform(
+                    fetch_minecraft_versions(client.clone()),
+                    Message::SetMcVersions,
+                ),
                 Command::perform(fetch_loader_versions(client), Message::SetLoaderVersions),
             ]),
         )
@@ -284,7 +287,7 @@ impl Application for State {
                                         .into()
                                 }
                             },
-                            install_location: self.server_location.clone(),
+                            install_dir: self.server_location.clone(),
                             download_jar: self.download_server_jar,
                             generate_script: self.generate_launch_script,
                         }),
@@ -301,16 +304,13 @@ impl Application for State {
                 }
             }
             Message::Error(error) => {
-                self.progress = 0.0;
-
+                eprintln!("{error:?}");
                 MessageDialog::new()
                     .set_title("Quilt Installer Error")
-                    .set_text(format!("{error}").as_str())
+                    .set_text(&error.to_string())
                     .set_type(MessageType::Error)
                     .show_alert()
                     .unwrap();
-
-                eprintln!("{error:?}");
             }
         }
 

@@ -1,11 +1,11 @@
 use std::{
     collections::HashMap,
     fs::{self, File},
-    io::{self, Seek},
+    io::{Seek, Write},
     path::PathBuf,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::{DateTime, Utc};
 use reqwest::Client;
@@ -28,39 +28,46 @@ pub struct ClientInstallation {
     pub generate_profile: bool,
 }
 
+impl std::fmt::Display for ClientInstallation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Quilt Loader {} for Minecraft {} to {}{}",
+            self.loader_version,
+            self.minecraft_version,
+            self.install_dir.display(),
+            if self.generate_profile {
+                " and generating profile"
+            } else {
+                ""
+            }
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ServerInstallation {
     pub minecraft_version: MinecraftVersion,
     pub loader_version: LoaderVersion,
-    pub install_location: PathBuf,
+    pub install_dir: PathBuf,
     pub download_jar: bool,
     pub generate_script: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, derive_more::Display)]
+#[display(fmt = "{}", version)]
 pub struct MinecraftVersion {
     pub version: String,
     pub stable: bool,
 }
 
-impl std::fmt::Display for MinecraftVersion {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.version)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, derive_more::Display)]
+#[display(fmt = "{}", version)]
 pub struct LoaderVersion {
     pub separator: char,
     pub build: u32,
     pub maven: String,
     pub version: Version,
-}
-
-impl std::fmt::Display for LoaderVersion {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.version)
-    }
 }
 
 pub async fn fetch_minecraft_versions(client: Client) -> Result<Vec<MinecraftVersion>> {
@@ -79,7 +86,7 @@ pub async fn fetch_loader_versions(client: Client) -> Result<Vec<LoaderVersion>>
         .await?)
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LauncherProfiles {
     profiles: HashMap<String, Profile>,
@@ -87,7 +94,7 @@ pub struct LauncherProfiles {
     other: Map<String, Value>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Profile {
     name: String,
@@ -99,7 +106,6 @@ struct Profile {
     #[serde(flatten)]
     other: Map<String, Value>,
 }
-
 
 #[cfg(target_os = "windows")]
 pub fn get_default_client_directory() -> PathBuf {
@@ -120,19 +126,21 @@ pub fn get_default_client_directory() -> PathBuf {
 }
 
 pub async fn install_client(client: Client, args: ClientInstallation) -> Result<()> {
-    // TODO: make pretty
-    println!("Installing client: {args:#?}");
+    println!("Installing client {args}");
 
     // Verify install location
     if !args.install_dir.join("launcher_profiles.json").exists() {
-        return Err(anyhow!(
+        bail!(
             "{} is not a valid installation directory",
             args.install_dir.display(),
-        ));
+        );
     }
 
     // Resolve profile directory
-    let profile_name = format!("quilt-loader-{}-{}", args.loader_version, args.minecraft_version);
+    let profile_name = format!(
+        "quilt-loader-{}-{}",
+        args.loader_version, args.minecraft_version
+    );
     let profile_dir = args.install_dir.join("versions").join(&profile_name);
 
     // Delete existing profile
@@ -143,28 +151,26 @@ pub async fn install_client(client: Client, args: ClientInstallation) -> Result<
     // Create profile directory
     fs::create_dir_all(&profile_dir)?;
 
-    // Create an empty jar file to make the vanilla launcher happy
-    File::create(profile_dir.join(profile_name.clone() + ".jar"))?;
-
     // Create launch json
     let mut file = File::create(profile_dir.join(profile_name.clone() + ".json"))?;
 
     // Download launch json
-    let mut response = client.get(format!(
-        "https://meta.quiltmc.org/v3/versions/loader/{}/{}/profile/json",
-        &args.minecraft_version.version, &args.loader_version.version
-    ))
-    .send()
-    .await?
-    .text()
-    .await?;
+    let mut response = client
+        .get(format!(
+            "https://meta.quiltmc.org/v3/versions/loader/{}/{}/profile/json",
+            &args.minecraft_version.version, &args.loader_version.version
+        ))
+        .send()
+        .await?
+        .text()
+        .await?;
 
     // Hack-Fix:
     // Was fixed in versions above 0.17.7
     if args.loader_version.version < Version::new(0, 17, 7) {
-        // Quilt-meta specifies both hashed and intermediary, but providing both to quilt-loader causes it to silently fail remapping.
-        // This really shouldn't be fixed here in the installer, but we need a solution now.
-        let mut json: Value = serde_json::from_str(&response).unwrap();
+        // Quilt-meta specifies both hashed and intermediary,
+        // but providing both to quilt-loader causes it to silently fail remapping.
+        let mut json: Value = serde_json::from_str(&response)?;
         let libs = json
             .as_object_mut()
             .unwrap()
@@ -181,11 +187,11 @@ pub async fn install_client(client: Client, args: ClientInstallation) -> Result<
                 .unwrap()
                 .starts_with("org.quiltmc:hashed")
         });
-        response = serde_json::to_string(&json).unwrap();
+        response = serde_json::to_string(&json)?;
     }
     // End of hack-fix
 
-    io::copy(&mut response.as_bytes(), &mut file)?;
+    file.write_all(response.as_bytes())?;
 
     // Generate profile
     if args.generate_profile {
@@ -196,9 +202,6 @@ pub async fn install_client(client: Client, args: ClientInstallation) -> Result<
         )?;
 
         let mut launcher_profiles: LauncherProfiles = serde_json::from_reader(&file)?;
-        file.set_len(0)?;
-        file.rewind()?;
-
         launcher_profiles.profiles.insert(
             profile_name.clone(),
             Profile {
@@ -211,6 +214,8 @@ pub async fn install_client(client: Client, args: ClientInstallation) -> Result<
             },
         );
 
+        file.set_len(0)?;
+        file.rewind()?;
         serde_json::to_writer_pretty(file, &launcher_profiles)?;
     }
 
@@ -220,6 +225,5 @@ pub async fn install_client(client: Client, args: ClientInstallation) -> Result<
 
 pub async fn install_server(args: ServerInstallation) -> Result<()> {
     println!("Installing server\n{args:#?}");
-    println!("Server installation hasn't been implemented yet!");
     Err(anyhow!("Server installation hasn't been implemented!"))
 }
