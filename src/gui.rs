@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 use std::path::PathBuf;
 
+use crate::installer;
 use anyhow::{anyhow, Error, Result};
 use iced::widget::{Radio, Space};
 use iced::window::{Icon, Settings as WindowSettings};
@@ -14,14 +15,14 @@ use iced::{
 };
 use native_dialog::{FileDialog, MessageDialog, MessageType};
 use png::Transformations;
-use crate::installer;
+use reqwest::Client;
 
 use crate::installer::{
     fetch_loader_versions, fetch_minecraft_versions, install_client, install_server,
     ClientInstallation, Installation, LoaderVersion, MinecraftVersion, ServerInstallation,
 };
 
-pub fn run() -> Result<()> {
+pub fn run(client: Client) -> Result<()> {
     State::run(Settings {
         window: WindowSettings {
             size: (600, 300),
@@ -29,6 +30,7 @@ pub fn run() -> Result<()> {
             icon: Some(create_icon()?),
             ..Default::default()
         },
+        flags: client,
         ..Default::default()
     })?;
 
@@ -72,6 +74,8 @@ struct State {
     // Progress information
     is_installing: bool,
     progress: f32,
+
+    client: Client,
 }
 
 #[derive(Debug)]
@@ -112,7 +116,7 @@ impl From<Message> for Command<Message> {
 impl Application for State {
     type Message = Message;
     type Executor = executor::Default;
-    type Flags = ();
+    type Flags = Client;
     type Theme = Theme;
 
     fn theme(&self) -> Self::Theme {
@@ -123,7 +127,7 @@ impl Application for State {
         }
     }
 
-    fn new(_: ()) -> (Self, Command<Self::Message>) {
+    fn new(client: Client) -> (Self, Command<Self::Message>) {
         (
             State {
                 client_location: installer::get_default_client_directory(),
@@ -131,11 +135,12 @@ impl Application for State {
                 server_location: std::env::current_dir().unwrap_or_default(),
                 download_server_jar: true,
                 generate_launch_script: true,
+                client: client.clone(),
                 ..Default::default()
             },
             Command::batch([
-                Command::perform(fetch_minecraft_versions(), Message::SetMcVersions),
-                Command::perform(fetch_loader_versions(), Message::SetLoaderVersions),
+                Command::perform(fetch_minecraft_versions(client.clone()), Message::SetMcVersions),
+                Command::perform(fetch_loader_versions(client), Message::SetLoaderVersions),
             ]),
         )
     }
@@ -234,26 +239,31 @@ impl Application for State {
 
                 return match self.installation_type {
                     Installation::Client => Command::perform(
-                        install_client(ClientInstallation {
-                            minecraft_version: match &self.selected_minecraft_version {
-                                Some(s) => s.clone(),
-                                None => {
-                                    return Message::Error(anyhow!(
-                                        "No Minecraft version selected!"
-                                    ))
-                                    .into()
-                                }
-                            },
-                            loader_version: match &self.selected_loader_version {
-                                Some(s) => s.clone(),
-                                None => {
-                                    return Message::Error(anyhow!("No Loader version selected!"))
+                        install_client(
+                            self.client.clone(),
+                            ClientInstallation {
+                                minecraft_version: match &self.selected_minecraft_version {
+                                    Some(s) => s.clone(),
+                                    None => {
+                                        return Message::Error(anyhow!(
+                                            "No Minecraft version selected!"
+                                        ))
                                         .into()
-                                }
+                                    }
+                                },
+                                loader_version: match &self.selected_loader_version {
+                                    Some(s) => s.clone(),
+                                    None => {
+                                        return Message::Error(anyhow!(
+                                            "No Loader version selected!"
+                                        ))
+                                        .into()
+                                    }
+                                },
+                                install_dir: self.client_location.clone(),
+                                generate_profile: self.generate_profile,
                             },
-                            install_dir: self.client_location.clone(),
-                            generate_profile: self.generate_profile,
-                        }),
+                        ),
                         Message::DoneInstalling,
                     ),
                     Installation::Server => Command::perform(
@@ -297,7 +307,8 @@ impl Application for State {
                     .set_title("Quilt Installer Error")
                     .set_text(format!("{error}").as_str())
                     .set_type(MessageType::Error)
-                    .show_alert().unwrap();
+                    .show_alert()
+                    .unwrap();
 
                 eprintln!("{error:?}");
             }
@@ -307,7 +318,7 @@ impl Application for State {
     }
 
     fn view(&self) -> Element<'_, Self::Message> {
-        let installation_label = Text::new("Installation:").width(140.into());
+        let installation_label = Text::new("Installation:").width(140);
         let installation_client = Radio::new(
             Installation::Client,
             "Client",
@@ -329,7 +340,7 @@ impl Application for State {
             .spacing(50)
             .padding(5);
 
-        let minecraft_version_label = Text::new("Minecraft version:").width(140.into());
+        let minecraft_version_label = Text::new("Minecraft version:").width(140);
         let minecraft_version_list = PickList::new(
             Cow::from_iter(
                 self.minecraft_versions
@@ -340,7 +351,7 @@ impl Application for State {
             self.selected_minecraft_version.clone(),
             Interaction::SelectMcVersion,
         )
-        .width(200.into());
+        .width(200);
         let enable_snapshots = Checkbox::new(
             "Show snapshots",
             self.show_snapshots,
@@ -349,14 +360,14 @@ impl Application for State {
         let mc_row = Row::new()
             .push(minecraft_version_label)
             .push(minecraft_version_list)
-            .push(Space::new(20.into(), 0.into()))
+            .push(Space::new(20, 0))
             .push(enable_snapshots)
             .width(Length::Fill)
             .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
-        let loader_version_label = Text::new("Loader version:").width(140.into());
+        let loader_version_label = Text::new("Loader version:").width(140);
         let loader_version_list = PickList::new(
             Cow::from_iter(
                 self.loader_versions
@@ -367,19 +378,19 @@ impl Application for State {
             self.selected_loader_version.clone(),
             Interaction::SelectLoaderVersion,
         )
-        .width(200.into());
+        .width(200);
         let enable_betas = Checkbox::new("Show betas", self.show_betas, Interaction::SetShowBetas);
         let loader_row = Row::new()
             .push(loader_version_label)
             .push(loader_version_list)
-            .push(Space::new(20.into(), 0.into()))
+            .push(Space::new(20, 0))
             .push(enable_betas)
             .width(Length::Fill)
             .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
-        let client_location_label = Text::new("Directory:").width(140.into());
+        let client_location_label = Text::new("Directory:").width(140);
         let client_location_input = TextInput::new(
             "Install location",
             self.client_location.to_str().unwrap(),
@@ -397,7 +408,7 @@ impl Application for State {
             .spacing(5)
             .padding(5);
 
-        let client_options_label = Text::new("Options:").width(140.into());
+        let client_options_label = Text::new("Options:").width(140);
         let create_profile = Checkbox::new(
             "Generate profile",
             self.generate_profile,
@@ -410,7 +421,7 @@ impl Application for State {
             .spacing(5)
             .padding(5);
 
-        let server_location_label = Text::new("Directory:").width(140.into());
+        let server_location_label = Text::new("Directory:").width(140);
         let server_location_input = TextInput::new(
             "Install location",
             self.server_location.to_str().unwrap(),
@@ -428,7 +439,7 @@ impl Application for State {
             .spacing(5)
             .padding(5);
 
-        let server_options_label = Text::new("Options:").width(140.into());
+        let server_options_label = Text::new("Options:").width(140);
         let download_server_jar = Checkbox::new(
             "Download server jar",
             self.download_server_jar,
@@ -442,7 +453,7 @@ impl Application for State {
         let server_options_row = Row::new()
             .push(server_options_label)
             .push(download_server_jar)
-            .push(Space::new(35.into(), 0.into()))
+            .push(Space::new(35, 0))
             .push(generate_launch_script)
             .align_items(Alignment::Center)
             .spacing(5)
