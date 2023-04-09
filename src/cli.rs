@@ -16,7 +16,7 @@ pub struct Args {
     /// The Minecraft version to install
     ///
     /// Pick between the
-    /// latest `stable` version (default),
+    /// latest `stable` version,
     /// latest `snapshot`,
     /// or a specific version number.
     #[arg(short = 'm', long, default_value_t)]
@@ -24,7 +24,7 @@ pub struct Args {
     /// The Quilt loader version to install
     ///
     /// Pick between the
-    /// latest `stable` version (default),
+    /// latest `stable` version,
     /// latest `beta`,
     /// or a specific version number.
     #[arg(short = 'l', long, default_value_t)]
