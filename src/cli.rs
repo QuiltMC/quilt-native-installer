@@ -2,14 +2,14 @@ use crate::installer::{
     self, ClientInstallation, LoaderVersion, MinecraftVersion, ServerInstallation,
 };
 use anyhow::Context;
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 use derive_more::Display;
 use reqwest::Client;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[clap(about, version)]
-#[clap(propagate_version = true)]
+#[command(about, version, propagate_version = true)]
 pub struct Args {
     #[clap(subcommand)]
     pub subcommand: Option<Subcommands>,
@@ -39,8 +39,12 @@ pub enum Subcommands {
         #[arg(short = 'p', long)]
         no_profile: bool,
         /// The directory to install to
-        #[arg(short = 'o', long)]
-        install_dir: Option<PathBuf>,
+        #[arg(
+            short = 'o',
+            long,
+            default_value_os_t = installer::get_default_client_directory()
+        )]
+        install_dir: PathBuf,
     },
     /// Install the Quilt standalone server
     Server {
@@ -91,7 +95,7 @@ impl From<String> for LoaderVersionCLI {
     }
 }
 
-pub async fn cli(client: Client, args: Args) -> anyhow::Result<()> {
+pub async fn cli(client: Client, args: Args) -> Result<()> {
     let (minecraft_version, loader_version) =
         get_versions(client.clone(), args.minecraft_version, args.loader_version).await?;
 
@@ -105,8 +109,7 @@ pub async fn cli(client: Client, args: Args) -> anyhow::Result<()> {
                 ClientInstallation {
                     minecraft_version,
                     loader_version,
-                    install_dir: install_dir
-                        .unwrap_or_else(installer::get_default_client_directory),
+                    install_dir,
                     generate_profile: !no_profile,
                 },
             )
@@ -133,7 +136,7 @@ async fn get_versions(
     client: Client,
     minecraft_version: MCVersionCLI,
     loader_version: LoaderVersionCLI,
-) -> anyhow::Result<(MinecraftVersion, LoaderVersion)> {
+) -> Result<(MinecraftVersion, LoaderVersion)> {
     let minecraft_versions = installer::fetch_minecraft_versions(client.clone()).await?;
     let loader_versions = installer::fetch_loader_versions(client).await?;
 
@@ -157,7 +160,7 @@ async fn get_versions(
                 .unwrap(),
             LoaderVersionCLI::Custom(input) => loader_versions
                 .into_iter()
-                .find(|v| v.version.to_string() == input)
+                .find(|v| v.to_string() == input)
                 .context(format!("Could not find Quilt Loader version {}", input))?,
         },
     ))
