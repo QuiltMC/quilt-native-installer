@@ -3,6 +3,7 @@ use crate::installer::{
 };
 use anyhow::Context;
 use clap::{Parser, Subcommand};
+use derive_more::Display;
 use reqwest::Client;
 use std::path::PathBuf;
 
@@ -18,16 +19,16 @@ pub struct Args {
     /// latest `stable` version (default),
     /// latest `snapshot`,
     /// or a specific version number.
-    #[arg(short = 'm', long)]
-    minecraft_version: Option<String>,
+    #[arg(short = 'm', long, default_value_t)]
+    minecraft_version: MCVersionCLI,
     /// The Quilt loader version to install
     ///
     /// Pick between the
     /// latest `stable` version (default),
     /// latest `beta`,
     /// or a specific version number.
-    #[arg(short = 'l', long)]
-    loader_version: Option<String>,
+    #[arg(short = 'l', long, default_value_t)]
+    loader_version: LoaderVersionCLI,
 }
 
 #[derive(Subcommand)]
@@ -41,20 +42,20 @@ pub enum Subcommands {
         #[arg(short = 'o', long)]
         install_dir: Option<PathBuf>,
     },
+    /// Install the Quilt standalone server
     Server {
-        /// Create launch scripts
-        #[arg(short = 's', long, default_value_t = true)]
-        generate_script: bool,
-        /// Download the server jar
-        #[arg(short, long, default_value_t = true)]
-        download_jar: bool,
+        /// Do not generate launch scripts
+        #[arg(short = 's', long)]
+        no_script: bool,
+        /// Do not download the server jar
+        #[arg(short = 'j', long)]
+        no_jar: bool,
         /// The directory to install to
         #[arg(short = 'o', long)]
         install_dir: PathBuf,
     },
 }
-
-#[derive(Clone, PartialEq, Eq, Default)]
+#[derive(Clone, PartialEq, Eq, Default, Display)]
 pub enum MCVersionCLI {
     #[default]
     Stable,
@@ -62,7 +63,7 @@ pub enum MCVersionCLI {
     Custom(String),
 }
 
-#[derive(Clone, PartialEq, Eq, Default)]
+#[derive(Clone, PartialEq, Eq, Default, Display)]
 pub enum LoaderVersionCLI {
     #[default]
     Stable,
@@ -70,41 +71,29 @@ pub enum LoaderVersionCLI {
     Custom(String),
 }
 
-impl From<Option<String>> for MCVersionCLI {
-    fn from(s: Option<String>) -> Self {
-        if let Some(s) = s {
-            match s.to_lowercase().as_ref() {
-                "stable" => Self::Stable,
-                "snapshot" => Self::Snapshot,
-                _ => Self::Custom(s),
-            }
-        } else {
-            Self::default()
+impl From<String> for MCVersionCLI {
+    fn from(s: String) -> Self {
+        match s.to_lowercase().as_ref() {
+            "stable" => Self::Stable,
+            "snapshot" => Self::Snapshot,
+            _ => Self::Custom(s),
         }
     }
 }
 
-impl From<Option<String>> for LoaderVersionCLI {
-    fn from(s: Option<String>) -> Self {
-        if let Some(s) = s {
-            match s.to_lowercase().as_ref() {
-                "stable" => Self::Stable,
-                "beta" => Self::Beta,
-                _ => Self::Custom(s),
-            }
-        } else {
-            Self::default()
+impl From<String> for LoaderVersionCLI {
+    fn from(s: String) -> Self {
+        match s.to_lowercase().as_ref() {
+            "stable" => Self::Stable,
+            "beta" => Self::Beta,
+            _ => Self::Custom(s),
         }
     }
 }
 
 pub async fn cli(client: Client, args: Args) -> anyhow::Result<()> {
-    let (minecraft_version, loader_version) = get_versions(
-        client.clone(),
-        args.minecraft_version.into(),
-        args.loader_version.into(),
-    )
-    .await?;
+    let (minecraft_version, loader_version) =
+        get_versions(client.clone(), args.minecraft_version, args.loader_version).await?;
 
     match args.subcommand.unwrap() {
         Subcommands::Client {
@@ -124,16 +113,16 @@ pub async fn cli(client: Client, args: Args) -> anyhow::Result<()> {
             .await
         }
         Subcommands::Server {
-            generate_script,
-            download_jar,
+            no_script,
+            no_jar,
             install_dir,
         } => {
             installer::install_server(ServerInstallation {
                 minecraft_version,
                 loader_version,
                 install_dir,
-                download_jar,
-                generate_script,
+                download_jar: !no_jar,
+                generate_script: !no_script,
             })
             .await
         }

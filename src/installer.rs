@@ -71,7 +71,8 @@ pub struct LoaderVersion {
 }
 
 pub async fn fetch_minecraft_versions(client: Client) -> Result<Vec<MinecraftVersion>> {
-    Ok(client.get("https://meta.quiltmc.org/v3/versions/game")
+    Ok(client
+        .get("https://meta.quiltmc.org/v3/versions/game")
         .send()
         .await?
         .json()
@@ -79,7 +80,8 @@ pub async fn fetch_minecraft_versions(client: Client) -> Result<Vec<MinecraftVer
 }
 
 pub async fn fetch_loader_versions(client: Client) -> Result<Vec<LoaderVersion>> {
-    Ok(client.get("https://meta.quiltmc.org/v3/versions/loader")
+    Ok(client
+        .get("https://meta.quiltmc.org/v3/versions/loader")
         .send()
         .await?
         .json()
