@@ -225,7 +225,7 @@ pub async fn install_client(client: Client, args: ClientInstallation) -> Result<
     Ok(())
 }
 
-pub async fn install_server(args: ServerInstallation) -> Result<()> {
+pub async fn install_server(_client: Client, args: ServerInstallation) -> Result<()> {
     println!("Installing server\n{args:#?}");
     Err(anyhow!("Server installation hasn't been implemented!"))
 }

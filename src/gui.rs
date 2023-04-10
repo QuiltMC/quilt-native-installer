@@ -189,8 +189,11 @@ impl Application for State {
                     Err(error) => return Message::Error(error).into(),
                 }
                 if self.selected_minecraft_version.is_none() {
-                    self.selected_minecraft_version =
-                        self.minecraft_versions.iter().find(|v| v.stable).cloned();
+                    self.selected_minecraft_version = self
+                        .minecraft_versions
+                        .iter()
+                        .find(|v| self.show_snapshots || v.stable)
+                        .cloned();
                 }
             }
             Message::SetLoaderVersions(result) => {
@@ -202,7 +205,7 @@ impl Application for State {
                     self.selected_loader_version = self
                         .loader_versions
                         .iter()
-                        .find(|v| v.version.pre.is_empty())
+                        .find(|v| self.show_betas || v.version.pre.is_empty())
                         .cloned();
                 }
             }
@@ -211,11 +214,10 @@ impl Application for State {
                 let working_dir = std::env::current_dir();
                 if self.client_location.is_dir() {
                     dialog = dialog.set_location(&self.client_location);
-                } else if working_dir.is_ok() {
-                    dialog = dialog.set_location(working_dir.as_deref().unwrap())
+                } else if let Ok(working_dir) = &working_dir {
+                    dialog = dialog.set_location(working_dir)
                 }
-                let result = dialog.show_open_single_dir();
-                match result {
+                match dialog.show_open_single_dir() {
                     Ok(Some(path)) => self.client_location = path,
                     Ok(None) => (),
                     Err(error) => return Message::Error(error.into()).into(),
@@ -226,11 +228,10 @@ impl Application for State {
                 let working_dir = std::env::current_dir();
                 if self.client_location.is_dir() {
                     dialog = dialog.set_location(&self.server_location);
-                } else if working_dir.is_ok() {
-                    dialog = dialog.set_location(working_dir.as_deref().unwrap())
+                } else if let Ok(working_dir) = &working_dir {
+                    dialog = dialog.set_location(working_dir)
                 }
-                let result = dialog.show_open_single_dir();
-                match result {
+                match dialog.show_open_single_dir() {
                     Ok(Some(path)) => self.server_location = path,
                     Ok(None) => (),
                     Err(error) => return Message::Error(error.into()).into(),
@@ -249,7 +250,7 @@ impl Application for State {
                                     Some(s) => s.clone(),
                                     None => {
                                         return Message::Error(anyhow!(
-                                            "No Minecraft version selected!"
+                                            "Minecraft version not selected!"
                                         ))
                                         .into()
                                     }
@@ -258,7 +259,7 @@ impl Application for State {
                                     Some(s) => s.clone(),
                                     None => {
                                         return Message::Error(anyhow!(
-                                            "No Loader version selected!"
+                                            "Loader version not selected!"
                                         ))
                                         .into()
                                     }
@@ -270,27 +271,32 @@ impl Application for State {
                         Message::DoneInstalling,
                     ),
                     Installation::Server => Command::perform(
-                        install_server(ServerInstallation {
-                            minecraft_version: match &self.selected_minecraft_version {
-                                Some(s) => s.clone(),
-                                None => {
-                                    return Message::Error(anyhow!(
-                                        "No Minecraft version selected!"
-                                    ))
-                                    .into()
-                                }
-                            },
-                            loader_version: match &self.selected_loader_version {
-                                Some(s) => s.clone(),
-                                None => {
-                                    return Message::Error(anyhow!("No Loader version selected!"))
+                        install_server(
+                            self.client.clone(),
+                            ServerInstallation {
+                                minecraft_version: match &self.selected_minecraft_version {
+                                    Some(s) => s.clone(),
+                                    None => {
+                                        return Message::Error(anyhow!(
+                                            "Minecraft version not selected!"
+                                        ))
                                         .into()
-                                }
+                                    }
+                                },
+                                loader_version: match &self.selected_loader_version {
+                                    Some(s) => s.clone(),
+                                    None => {
+                                        return Message::Error(anyhow!(
+                                            "Loader version not selected!"
+                                        ))
+                                        .into()
+                                    }
+                                },
+                                install_dir: self.server_location.clone(),
+                                download_jar: self.download_server_jar,
+                                generate_script: self.generate_launch_script,
                             },
-                            install_dir: self.server_location.clone(),
-                            download_jar: self.download_server_jar,
-                            generate_script: self.generate_launch_script,
-                        }),
+                        ),
                         Message::DoneInstalling,
                     ),
                 };

@@ -120,13 +120,16 @@ pub async fn cli(client: Client, args: Args) -> Result<()> {
             no_jar,
             install_dir,
         } => {
-            installer::install_server(ServerInstallation {
-                minecraft_version,
-                loader_version,
-                install_dir,
-                download_jar: !no_jar,
-                generate_script: !no_script,
-            })
+            installer::install_server(
+                client,
+                ServerInstallation {
+                    minecraft_version,
+                    loader_version,
+                    install_dir,
+                    download_jar: !no_jar,
+                    generate_script: !no_script,
+                },
+            )
             .await
         }
     }
