@@ -3,14 +3,11 @@ use std::fmt::Debug;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Error, Result};
-use iced::widget::{Radio, Space};
-use iced::window::{Icon, Settings as WindowSettings};
-use iced::Theme;
+use iced::widget::{
+    Button, Checkbox, Column, PickList, ProgressBar, Radio, Row, Rule, Space, Text, TextInput,
+};
 use iced::{
-    alignment::{Alignment, Horizontal},
-    executor,
-    widget::{Button, Checkbox, Column, PickList, ProgressBar, Row, Rule, Text, TextInput},
-    Application, Command, Element, Length, Settings,
+    alignment::Horizontal, executor, window, Application, Command, Element, Length, Settings, Theme,
 };
 use native_dialog::{FileDialog, MessageDialog, MessageType};
 use png::Transformations;
@@ -24,7 +21,7 @@ use crate::installer::{
 
 pub fn run(client: Client) -> Result<()> {
     State::run(Settings {
-        window: WindowSettings {
+        window: window::Settings {
             size: (600, 300),
             resizable: false,
             icon: Some(create_icon()?),
@@ -37,14 +34,18 @@ pub fn run(client: Client) -> Result<()> {
     Ok(())
 }
 
-fn create_icon() -> Result<Icon> {
+fn create_icon() -> Result<window::Icon> {
     let mut decoder = png::Decoder::new(crate::ICON);
     decoder.set_transformations(Transformations::EXPAND);
     let mut reader = decoder.read_info()?;
     let mut buffer = vec![0; reader.output_buffer_size()];
     let info = reader.next_frame(&mut buffer)?;
     let bytes = &buffer[..info.buffer_size()];
-    Ok(Icon::from_rgba(bytes.to_vec(), info.width, info.height)?)
+    Ok(window::icon::from_rgba(
+        bytes.to_vec(),
+        info.width,
+        info.height,
+    )?)
 }
 
 #[derive(Debug, Default)]
@@ -92,7 +93,7 @@ enum Message {
 
 #[derive(Debug, Clone)]
 enum Interaction {
-    ChangeClientLocation(PathBuf),
+    ChangeClientLocation(String),
     BrowseClientLocation,
     Install,
     SelectInstallation(Installation),
@@ -102,7 +103,7 @@ enum Interaction {
     SetShowBetas(bool),
     GenerateLaunchScript(bool),
     GenerateProfile(bool),
-    ChangeServerLocation(PathBuf),
+    ChangeServerLocation(String),
     BrowseServerLocation,
     DownloadServerJar(bool),
 }
@@ -155,7 +156,9 @@ impl Application for State {
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
         match message {
             Message::Interaction(interaction) => match interaction {
-                Interaction::ChangeClientLocation(location) => self.client_location = location,
+                Interaction::ChangeClientLocation(location) => {
+                    self.client_location = location.into();
+                }
                 Interaction::BrowseClientLocation => return Message::BrowseClientLocation.into(),
                 Interaction::Install => return Message::Install.into(),
                 Interaction::SelectInstallation(i) => self.installation_type = i,
@@ -179,7 +182,9 @@ impl Application for State {
                 }
                 Interaction::GenerateLaunchScript(value) => self.generate_launch_script = value,
                 Interaction::GenerateProfile(value) => self.generate_profile = value,
-                Interaction::ChangeServerLocation(location) => self.server_location = location,
+                Interaction::ChangeServerLocation(location) => {
+                    self.server_location = location.into();
+                }
                 Interaction::BrowseServerLocation => return Message::BrowseServerLocation.into(),
                 Interaction::DownloadServerJar(value) => self.download_server_jar = value,
             },
@@ -326,14 +331,14 @@ impl Application for State {
     fn view(&self) -> Element<'_, Self::Message> {
         let installation_label = Text::new("Installation:").width(140);
         let installation_client = Radio::new(
-            Installation::Client,
             "Client",
+            Installation::Client,
             Some(self.installation_type),
             Interaction::SelectInstallation,
         );
         let installation_server = Radio::new(
-            Installation::Server,
             "Server",
+            Installation::Server,
             Some(self.installation_type),
             Interaction::SelectInstallation,
         );
@@ -342,7 +347,6 @@ impl Application for State {
             .push(installation_client)
             .push(installation_server)
             .width(Length::Fill)
-            .align_items(Alignment::Fill)
             .spacing(50)
             .padding(5);
 
@@ -369,7 +373,6 @@ impl Application for State {
             .push(Space::new(20, 0))
             .push(enable_snapshots)
             .width(Length::Fill)
-            .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
@@ -392,17 +395,19 @@ impl Application for State {
             .push(Space::new(20, 0))
             .push(enable_betas)
             .width(Length::Fill)
-            .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
         let client_location_label = Text::new("Directory:").width(140);
-        let client_location_input = TextInput::new(
+        let mut client_location_input = TextInput::new(
             "Install location",
-            self.client_location.to_str().unwrap(),
-            |s| Interaction::ChangeClientLocation(PathBuf::from(s)),
+            &self.client_location.display().to_string(),
         )
         .padding(5);
+        if !self.is_installing {
+            client_location_input =
+                client_location_input.on_input(Interaction::ChangeClientLocation);
+        }
         let client_loction_browse =
             Button::new(Text::new("Browse...")).on_press(Interaction::BrowseClientLocation);
         let client_location_row = Row::new()
@@ -410,7 +415,6 @@ impl Application for State {
             .push(client_location_input)
             .push(client_loction_browse)
             .width(Length::Fill)
-            .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
@@ -423,17 +427,19 @@ impl Application for State {
         let client_options_row = Row::new()
             .push(client_options_label)
             .push(create_profile)
-            .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
         let server_location_label = Text::new("Directory:").width(140);
-        let server_location_input = TextInput::new(
+        let mut server_location_input = TextInput::new(
             "Install location",
-            self.server_location.to_str().unwrap(),
-            |s| Interaction::ChangeServerLocation(PathBuf::from(s)),
+            &self.server_location.display().to_string(),
         )
         .padding(5);
+        if !self.is_installing {
+            server_location_input =
+                server_location_input.on_input(Interaction::ChangeServerLocation);
+        }
         let server_loction_browse =
             Button::new(Text::new("Browse...")).on_press(Interaction::BrowseServerLocation);
         let server_location_row = Row::new()
@@ -441,7 +447,6 @@ impl Application for State {
             .push(server_location_input)
             .push(server_loction_browse)
             .width(Length::Fill)
-            .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
@@ -461,7 +466,6 @@ impl Application for State {
             .push(download_server_jar)
             .push(Space::new(35, 0))
             .push(generate_launch_script)
-            .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
@@ -488,7 +492,6 @@ impl Application for State {
         let progress = ProgressBar::new(0.0..=1.0, self.progress);
         column = column.push(button).push(progress);
 
-        let content: Element<Interaction> = column.into();
-        content.map(Message::Interaction)
+        Element::from(column).map(Message::Interaction)
     }
 }
