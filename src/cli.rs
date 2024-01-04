@@ -36,7 +36,7 @@ pub enum Subcommands {
     /// Install the Quilt Loader client
     Client {
         /// Don't create a profile
-        #[arg(short = 'p', long)]
+        #[arg(short = 'P', long)]
         no_profile: bool,
         /// The directory to install to
         #[arg(
@@ -48,11 +48,11 @@ pub enum Subcommands {
     },
     /// Install the Quilt standalone server
     Server {
-        /// Do not generate launch scripts
-        #[arg(short = 's', long)]
-        no_script: bool,
+        /// Do not generate a launch script
+        #[arg(short = 'S', long)]
+        no_launch_script: bool,
         /// Do not download the server jar
-        #[arg(short = 'j', long)]
+        #[arg(short = 'J', long)]
         no_jar: bool,
         /// The directory to install to
         #[arg(short = 'o', long)]
@@ -116,7 +116,7 @@ pub async fn cli(client: Client, args: Args) -> Result<()> {
             .await
         }
         Subcommands::Server {
-            no_script,
+            no_launch_script,
             no_jar,
             install_dir,
         } => {
@@ -127,7 +127,7 @@ pub async fn cli(client: Client, args: Args) -> Result<()> {
                     loader_version,
                     install_dir,
                     download_jar: !no_jar,
-                    generate_script: !no_script,
+                    generate_script: !no_launch_script,
                 },
             )
             .await
@@ -150,21 +150,21 @@ async fn get_versions(
             MCVersionCLI::Custom(input) => minecraft_versions
                 .into_iter()
                 .find(|v| v.version == input)
-                .context(format!("Could not find Minecraft version {}", input))?,
+                .with_context(|| format!("Could not find Minecraft version {}", input))?,
         },
         match loader_version {
             LoaderVersionCLI::Stable => loader_versions
                 .into_iter()
                 .find(|v| v.version.pre.is_empty())
-                .unwrap(),
+                .with_context(|| "Could not find a stable Quilt Loader version")?,
             LoaderVersionCLI::Beta => loader_versions
                 .into_iter()
                 .find(|v| !v.version.pre.is_empty())
-                .unwrap(),
+                .with_context(|| "Could not find a beta Quilt Loader version")?,
             LoaderVersionCLI::Custom(input) => loader_versions
                 .into_iter()
                 .find(|v| v.to_string() == input)
-                .context(format!("Could not find Quilt Loader version {}", input))?,
+                .with_context(|| format!("Could not find Quilt Loader version {}", input))?,
         },
     ))
 }
