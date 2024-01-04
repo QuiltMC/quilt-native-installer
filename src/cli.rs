@@ -156,11 +156,11 @@ async fn get_versions(
             LoaderVersionCLI::Stable => loader_versions
                 .into_iter()
                 .find(|v| v.version.pre.is_empty())
-                .with_context(|| "Could not find a stable Quilt Loader version")?,
+                .context("Could not find a stable Quilt Loader version")?,
             LoaderVersionCLI::Beta => loader_versions
                 .into_iter()
                 .find(|v| !v.version.pre.is_empty())
-                .with_context(|| "Could not find a beta Quilt Loader version")?,
+                .context("Could not find a beta Quilt Loader version")?,
             LoaderVersionCLI::Custom(input) => loader_versions
                 .into_iter()
                 .find(|v| v.to_string() == input)
