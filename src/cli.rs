@@ -1,109 +1,170 @@
-use std::path::PathBuf;
-use anyhow::anyhow;
+use crate::installer::{
+    self, ClientInstallation, LoaderVersion, MinecraftVersion, ServerInstallation,
+};
+use anyhow::Context;
+use anyhow::Result;
 use clap::{Parser, Subcommand};
+use derive_more::Display;
 use reqwest::Client;
-use crate::installer;
-use crate::installer::{ClientInstallation, LoaderVersion, MinecraftVersion};
+use std::path::PathBuf;
 
 #[derive(Parser)]
-#[clap(about, version)]
-#[clap(propagate_version = true)]
+#[command(about, version, propagate_version = true)]
 pub struct Args {
     #[clap(subcommand)]
-    pub subcommand: Option<SubCommands>,
+    pub subcommand: Option<Subcommands>,
+    /// The Minecraft version to install
+    ///
+    /// Pick between the
+    /// latest `stable` version,
+    /// latest `snapshot`,
+    /// or a specific version number.
+    #[arg(short = 'm', long, default_value_t)]
+    minecraft_version: MCVersionCLI,
+    /// The Quilt loader version to install
+    ///
+    /// Pick between the
+    /// latest `stable` version,
+    /// latest `beta`,
+    /// or a specific version number.
+    #[arg(short = 'l', long, default_value_t)]
+    loader_version: LoaderVersionCLI,
 }
 
 #[derive(Subcommand)]
-pub enum SubCommands {
-    Install {
-        #[command(subcommand)]
-        subcommand: InstallSubcommands
-    }
-}
-
-#[derive(Subcommand)]
-pub enum InstallSubcommands {
+pub enum Subcommands {
+    /// Install the Quilt Loader client
     Client {
-        #[arg(short='M',long)]
-        minecraft_version: Option<String>,
-
-        #[arg(short='L',long)]
-        loader_version: Option<String>,
-        #[arg(short='s',long)]
-        snapshot: bool,
-        #[arg(short='b',long)]
-        loader_beta: bool,
-
-        #[arg(short, long)]
+        /// Don't create a profile
+        #[arg(short = 'P', long)]
         no_profile: bool,
-        #[arg(short, long, value_name = "'.minecraft' DIRECTORY")]
-        install_dir: Option<PathBuf>
+        /// The directory to install to
+        #[arg(
+            short = 'o',
+            long,
+            default_value_os_t = installer::get_default_client_directory()
+        )]
+        install_dir: PathBuf,
     },
+    /// Install the Quilt standalone server
     Server {
-        #[arg(short='M',long)]
-        minecraft_version: Option<String>,
-        #[arg(short='L',long)]
-        loader_version: Option<String>,
+        /// Do not generate a launch script
+        #[arg(short = 'S', long)]
+        no_launch_script: bool,
+        /// Do not download the server jar
+        #[arg(short = 'J', long)]
+        no_jar: bool,
+        /// The directory to install to
+        #[arg(short = 'o', long)]
+        install_dir: PathBuf,
+    },
+}
+#[derive(Clone, PartialEq, Eq, Default, Display)]
+pub enum MCVersionCLI {
+    #[default]
+    Stable,
+    Snapshot,
+    Custom(String),
+}
 
-        #[arg(short, long)]
-        create_scripts: bool,
-        #[arg(short, long)]
-        download_server: bool,
-        #[arg(short, long)]
-        install_dir: PathBuf
+#[derive(Clone, PartialEq, Eq, Default, Display)]
+pub enum LoaderVersionCLI {
+    #[default]
+    Stable,
+    Beta,
+    Custom(String),
+}
+
+impl From<String> for MCVersionCLI {
+    fn from(s: String) -> Self {
+        match s.to_lowercase().as_ref() {
+            "stable" => Self::Stable,
+            "snapshot" => Self::Snapshot,
+            _ => Self::Custom(s),
+        }
     }
 }
 
-
-pub async fn cli(client: Client, args: SubCommands) -> anyhow::Result<()> {
-    match args {
-            SubCommands::Install { subcommand} => {
-                match subcommand {
-                    InstallSubcommands::Client { minecraft_version, loader_version, snapshot, loader_beta, no_profile, install_dir } => {
-                        let (mc_version_to_install, loader_version_to_install) =  get_versions(client.clone(), minecraft_version, loader_version, snapshot, loader_beta).await?;
-                        let install_dir = install_dir.unwrap_or_else(installer::get_default_client_directory);
-
-                            installer::install_client(client, ClientInstallation {
-                                minecraft_version: mc_version_to_install,
-                                loader_version: loader_version_to_install,
-                                install_dir,
-                                generate_profile: !no_profile}).await?;
-
-                    }
-                    InstallSubcommands::Server { .. } => {}
-                }
-            }
+impl From<String> for LoaderVersionCLI {
+    fn from(s: String) -> Self {
+        match s.to_lowercase().as_ref() {
+            "stable" => Self::Stable,
+            "beta" => Self::Beta,
+            _ => Self::Custom(s),
         }
-
-    Ok(())
+    }
 }
 
-async fn get_versions(client: Client, minecraft_version: Option<String>, loader_version: Option<String>, snapshot: bool, loader_beta: bool) -> anyhow::Result<(MinecraftVersion, LoaderVersion)> {
-    let mc_versions = installer::fetch_minecraft_versions(client.clone());
-    let loader_versions = installer::fetch_loader_versions(client);
+pub async fn cli(client: Client, args: Args) -> Result<()> {
+    let (minecraft_version, loader_version) =
+        get_versions(client.clone(), args.minecraft_version, args.loader_version).await?;
 
-    let mc_version_to_install: MinecraftVersion;
-    let loader_version_to_install: LoaderVersion;
-
-    if let Some(minecraft_version) = minecraft_version {
-        if let Some(found) = mc_versions.await?.iter().find(|v| v.version.eq(&minecraft_version)).cloned() {
-            mc_version_to_install = found;
-        } else {
-            return Err(anyhow!("Could not find Minecraft version {}", minecraft_version))
+    match args.subcommand.unwrap() {
+        Subcommands::Client {
+            no_profile,
+            install_dir,
+        } => {
+            installer::install_client(
+                client,
+                ClientInstallation {
+                    minecraft_version,
+                    loader_version,
+                    install_dir,
+                    generate_profile: !no_profile,
+                },
+            )
+            .await
         }
-    } else {
-        mc_version_to_install = mc_versions.await?.iter().find(|v| snapshot || v.stable).cloned().expect("Unable to select a Minecraft version automatically")
-    }
-    // Yes, this duplicated code could be abstracted by being clever with generics, but this is easier.
-    if let Some(loader_version) = loader_version {
-        if let Some(found) = loader_versions.await?.iter().find(|v| v.version.to_string().eq(&loader_version)).cloned() {
-            loader_version_to_install = found;
-        } else {
-            return Err(anyhow!("Could not find Loader version {}", loader_version))
+        Subcommands::Server {
+            no_launch_script,
+            no_jar,
+            install_dir,
+        } => {
+            installer::install_server(
+                client,
+                ServerInstallation {
+                    minecraft_version,
+                    loader_version,
+                    install_dir,
+                    download_jar: !no_jar,
+                    generate_script: !no_launch_script,
+                },
+            )
+            .await
         }
-    } else {
-        loader_version_to_install = loader_versions.await?.iter().find(|v| loader_beta || v.version.pre.is_empty()).cloned().expect("Unable to select a Loader version automatically")
     }
+}
 
-    Ok((mc_version_to_install, loader_version_to_install))
+async fn get_versions(
+    client: Client,
+    minecraft_version: MCVersionCLI,
+    loader_version: LoaderVersionCLI,
+) -> Result<(MinecraftVersion, LoaderVersion)> {
+    let minecraft_versions = installer::fetch_minecraft_versions(client.clone()).await?;
+    let loader_versions = installer::fetch_loader_versions(client).await?;
+
+    Ok((
+        match minecraft_version {
+            MCVersionCLI::Stable => minecraft_versions.into_iter().find(|v| v.stable).unwrap(),
+            MCVersionCLI::Snapshot => minecraft_versions.into_iter().find(|v| !v.stable).unwrap(),
+            MCVersionCLI::Custom(input) => minecraft_versions
+                .into_iter()
+                .find(|v| v.version == input)
+                .with_context(|| format!("Could not find Minecraft version {}", input))?,
+        },
+        match loader_version {
+            LoaderVersionCLI::Stable => loader_versions
+                .into_iter()
+                .find(|v| v.version.pre.is_empty())
+                .context("Could not find a stable Quilt Loader version")?,
+            LoaderVersionCLI::Beta => loader_versions
+                .into_iter()
+                .find(|v| !v.version.pre.is_empty())
+                .context("Could not find a beta Quilt Loader version")?,
+            LoaderVersionCLI::Custom(input) => loader_versions
+                .into_iter()
+                .find(|v| v.to_string() == input)
+                .with_context(|| format!("Could not find Quilt Loader version {}", input))?,
+        },
+    ))
 }

@@ -2,29 +2,26 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 use std::path::PathBuf;
 
-use crate::installer;
 use anyhow::{anyhow, Error, Result};
-use iced::widget::{Radio, Space};
-use iced::window::{Icon, Settings as WindowSettings};
-use iced::Theme;
+use iced::widget::{
+    Button, Checkbox, Column, PickList, ProgressBar, Radio, Row, Rule, Space, Text, TextInput,
+};
 use iced::{
-    alignment::{Alignment, Horizontal},
-    executor,
-    widget::{Button, Checkbox, Column, PickList, ProgressBar, Row, Rule, Text, TextInput},
-    Application, Command, Element, Length, Settings,
+    alignment::Horizontal, executor, window, Application, Command, Element, Length, Settings, Theme,
 };
 use native_dialog::{FileDialog, MessageDialog, MessageType};
 use png::Transformations;
 use reqwest::Client;
 
 use crate::installer::{
-    fetch_loader_versions, fetch_minecraft_versions, install_client, install_server,
-    ClientInstallation, Installation, LoaderVersion, MinecraftVersion, ServerInstallation,
+    fetch_loader_versions, fetch_minecraft_versions, get_default_client_directory, install_client,
+    install_server, ClientInstallation, Installation, LoaderVersion, MinecraftVersion,
+    ServerInstallation,
 };
 
 pub fn run(client: Client) -> Result<()> {
     State::run(Settings {
-        window: WindowSettings {
+        window: window::Settings {
             size: (600, 300),
             resizable: false,
             icon: Some(create_icon()?),
@@ -37,15 +34,18 @@ pub fn run(client: Client) -> Result<()> {
     Ok(())
 }
 
-fn create_icon() -> Result<Icon> {
+fn create_icon() -> Result<window::Icon> {
     let mut decoder = png::Decoder::new(crate::ICON);
     decoder.set_transformations(Transformations::EXPAND);
     let mut reader = decoder.read_info()?;
     let mut buffer = vec![0; reader.output_buffer_size()];
     let info = reader.next_frame(&mut buffer)?;
     let bytes = &buffer[..info.buffer_size()];
-    let icon = Icon::from_rgba(bytes.to_vec(), info.width, info.height)?;
-    Ok(icon)
+    Ok(window::icon::from_rgba(
+        bytes.to_vec(),
+        info.width,
+        info.height,
+    )?)
 }
 
 #[derive(Debug, Default)]
@@ -75,6 +75,7 @@ struct State {
     is_installing: bool,
     progress: f32,
 
+    // HTTP reqwest client
     client: Client,
 }
 
@@ -92,7 +93,7 @@ enum Message {
 
 #[derive(Debug, Clone)]
 enum Interaction {
-    ChangeClientLocation(PathBuf),
+    ChangeClientLocation(String),
     BrowseClientLocation,
     Install,
     SelectInstallation(Installation),
@@ -102,7 +103,7 @@ enum Interaction {
     SetShowBetas(bool),
     GenerateLaunchScript(bool),
     GenerateProfile(bool),
-    ChangeServerLocation(PathBuf),
+    ChangeServerLocation(String),
     BrowseServerLocation,
     DownloadServerJar(bool),
 }
@@ -130,7 +131,7 @@ impl Application for State {
     fn new(client: Client) -> (Self, Command<Self::Message>) {
         (
             State {
-                client_location: installer::get_default_client_directory(),
+                client_location: get_default_client_directory(),
                 generate_profile: true,
                 server_location: std::env::current_dir().unwrap_or_default(),
                 download_server_jar: true,
@@ -139,7 +140,10 @@ impl Application for State {
                 ..Default::default()
             },
             Command::batch([
-                Command::perform(fetch_minecraft_versions(client.clone()), Message::SetMcVersions),
+                Command::perform(
+                    fetch_minecraft_versions(client.clone()),
+                    Message::SetMcVersions,
+                ),
                 Command::perform(fetch_loader_versions(client), Message::SetLoaderVersions),
             ]),
         )
@@ -152,7 +156,9 @@ impl Application for State {
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
         match message {
             Message::Interaction(interaction) => match interaction {
-                Interaction::ChangeClientLocation(location) => self.client_location = location,
+                Interaction::ChangeClientLocation(location) => {
+                    self.client_location = location.into();
+                }
                 Interaction::BrowseClientLocation => return Message::BrowseClientLocation.into(),
                 Interaction::Install => return Message::Install.into(),
                 Interaction::SelectInstallation(i) => self.installation_type = i,
@@ -176,7 +182,9 @@ impl Application for State {
                 }
                 Interaction::GenerateLaunchScript(value) => self.generate_launch_script = value,
                 Interaction::GenerateProfile(value) => self.generate_profile = value,
-                Interaction::ChangeServerLocation(location) => self.server_location = location,
+                Interaction::ChangeServerLocation(location) => {
+                    self.server_location = location.into();
+                }
                 Interaction::BrowseServerLocation => return Message::BrowseServerLocation.into(),
                 Interaction::DownloadServerJar(value) => self.download_server_jar = value,
             },
@@ -186,8 +194,11 @@ impl Application for State {
                     Err(error) => return Message::Error(error).into(),
                 }
                 if self.selected_minecraft_version.is_none() {
-                    self.selected_minecraft_version =
-                        self.minecraft_versions.iter().find(|v| v.stable).cloned();
+                    self.selected_minecraft_version = self
+                        .minecraft_versions
+                        .iter()
+                        .find(|v| self.show_snapshots || v.stable)
+                        .cloned();
                 }
             }
             Message::SetLoaderVersions(result) => {
@@ -199,7 +210,7 @@ impl Application for State {
                     self.selected_loader_version = self
                         .loader_versions
                         .iter()
-                        .find(|v| v.version.pre.is_empty())
+                        .find(|v| self.show_betas || v.version.pre.is_empty())
                         .cloned();
                 }
             }
@@ -208,11 +219,10 @@ impl Application for State {
                 let working_dir = std::env::current_dir();
                 if self.client_location.is_dir() {
                     dialog = dialog.set_location(&self.client_location);
-                } else if working_dir.is_ok() {
-                    dialog = dialog.set_location(working_dir.as_deref().unwrap())
+                } else if let Ok(working_dir) = &working_dir {
+                    dialog = dialog.set_location(working_dir)
                 }
-                let result = dialog.show_open_single_dir();
-                match result {
+                match dialog.show_open_single_dir() {
                     Ok(Some(path)) => self.client_location = path,
                     Ok(None) => (),
                     Err(error) => return Message::Error(error.into()).into(),
@@ -223,11 +233,10 @@ impl Application for State {
                 let working_dir = std::env::current_dir();
                 if self.client_location.is_dir() {
                     dialog = dialog.set_location(&self.server_location);
-                } else if working_dir.is_ok() {
-                    dialog = dialog.set_location(working_dir.as_deref().unwrap())
+                } else if let Ok(working_dir) = &working_dir {
+                    dialog = dialog.set_location(working_dir)
                 }
-                let result = dialog.show_open_single_dir();
-                match result {
+                match dialog.show_open_single_dir() {
                     Ok(Some(path)) => self.server_location = path,
                     Ok(None) => (),
                     Err(error) => return Message::Error(error.into()).into(),
@@ -246,7 +255,7 @@ impl Application for State {
                                     Some(s) => s.clone(),
                                     None => {
                                         return Message::Error(anyhow!(
-                                            "No Minecraft version selected!"
+                                            "Minecraft version not selected!"
                                         ))
                                         .into()
                                     }
@@ -255,7 +264,7 @@ impl Application for State {
                                     Some(s) => s.clone(),
                                     None => {
                                         return Message::Error(anyhow!(
-                                            "No Loader version selected!"
+                                            "Loader version not selected!"
                                         ))
                                         .into()
                                     }
@@ -267,27 +276,32 @@ impl Application for State {
                         Message::DoneInstalling,
                     ),
                     Installation::Server => Command::perform(
-                        install_server(ServerInstallation {
-                            minecraft_version: match &self.selected_minecraft_version {
-                                Some(s) => s.clone(),
-                                None => {
-                                    return Message::Error(anyhow!(
-                                        "No Minecraft version selected!"
-                                    ))
-                                    .into()
-                                }
-                            },
-                            loader_version: match &self.selected_loader_version {
-                                Some(s) => s.clone(),
-                                None => {
-                                    return Message::Error(anyhow!("No Loader version selected!"))
+                        install_server(
+                            self.client.clone(),
+                            ServerInstallation {
+                                minecraft_version: match &self.selected_minecraft_version {
+                                    Some(s) => s.clone(),
+                                    None => {
+                                        return Message::Error(anyhow!(
+                                            "Minecraft version not selected!"
+                                        ))
                                         .into()
-                                }
+                                    }
+                                },
+                                loader_version: match &self.selected_loader_version {
+                                    Some(s) => s.clone(),
+                                    None => {
+                                        return Message::Error(anyhow!(
+                                            "Loader version not selected!"
+                                        ))
+                                        .into()
+                                    }
+                                },
+                                install_dir: self.server_location.clone(),
+                                download_jar: self.download_server_jar,
+                                generate_script: self.generate_launch_script,
                             },
-                            install_location: self.server_location.clone(),
-                            download_jar: self.download_server_jar,
-                            generate_script: self.generate_launch_script,
-                        }),
+                        ),
                         Message::DoneInstalling,
                     ),
                 };
@@ -301,16 +315,13 @@ impl Application for State {
                 }
             }
             Message::Error(error) => {
-                self.progress = 0.0;
-
+                eprintln!("{error:?}");
                 MessageDialog::new()
                     .set_title("Quilt Installer Error")
-                    .set_text(format!("{error}").as_str())
+                    .set_text(&error.to_string())
                     .set_type(MessageType::Error)
                     .show_alert()
                     .unwrap();
-
-                eprintln!("{error:?}");
             }
         }
 
@@ -320,14 +331,14 @@ impl Application for State {
     fn view(&self) -> Element<'_, Self::Message> {
         let installation_label = Text::new("Installation:").width(140);
         let installation_client = Radio::new(
-            Installation::Client,
             "Client",
+            Installation::Client,
             Some(self.installation_type),
             Interaction::SelectInstallation,
         );
         let installation_server = Radio::new(
-            Installation::Server,
             "Server",
+            Installation::Server,
             Some(self.installation_type),
             Interaction::SelectInstallation,
         );
@@ -336,7 +347,6 @@ impl Application for State {
             .push(installation_client)
             .push(installation_server)
             .width(Length::Fill)
-            .align_items(Alignment::Fill)
             .spacing(50)
             .padding(5);
 
@@ -363,7 +373,6 @@ impl Application for State {
             .push(Space::new(20, 0))
             .push(enable_snapshots)
             .width(Length::Fill)
-            .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
@@ -386,17 +395,19 @@ impl Application for State {
             .push(Space::new(20, 0))
             .push(enable_betas)
             .width(Length::Fill)
-            .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
         let client_location_label = Text::new("Directory:").width(140);
-        let client_location_input = TextInput::new(
+        let mut client_location_input = TextInput::new(
             "Install location",
-            self.client_location.to_str().unwrap(),
-            |s| Interaction::ChangeClientLocation(PathBuf::from(s)),
+            &self.client_location.display().to_string(),
         )
         .padding(5);
+        if !self.is_installing {
+            client_location_input =
+                client_location_input.on_input(Interaction::ChangeClientLocation);
+        }
         let client_loction_browse =
             Button::new(Text::new("Browse...")).on_press(Interaction::BrowseClientLocation);
         let client_location_row = Row::new()
@@ -404,7 +415,6 @@ impl Application for State {
             .push(client_location_input)
             .push(client_loction_browse)
             .width(Length::Fill)
-            .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
@@ -417,17 +427,19 @@ impl Application for State {
         let client_options_row = Row::new()
             .push(client_options_label)
             .push(create_profile)
-            .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
         let server_location_label = Text::new("Directory:").width(140);
-        let server_location_input = TextInput::new(
+        let mut server_location_input = TextInput::new(
             "Install location",
-            self.server_location.to_str().unwrap(),
-            |s| Interaction::ChangeServerLocation(PathBuf::from(s)),
+            &self.server_location.display().to_string(),
         )
         .padding(5);
+        if !self.is_installing {
+            server_location_input =
+                server_location_input.on_input(Interaction::ChangeServerLocation);
+        }
         let server_loction_browse =
             Button::new(Text::new("Browse...")).on_press(Interaction::BrowseServerLocation);
         let server_location_row = Row::new()
@@ -435,7 +447,6 @@ impl Application for State {
             .push(server_location_input)
             .push(server_loction_browse)
             .width(Length::Fill)
-            .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
@@ -455,7 +466,6 @@ impl Application for State {
             .push(download_server_jar)
             .push(Space::new(35, 0))
             .push(generate_launch_script)
-            .align_items(Alignment::Center)
             .spacing(5)
             .padding(5);
 
@@ -482,7 +492,6 @@ impl Application for State {
         let progress = ProgressBar::new(0.0..=1.0, self.progress);
         column = column.push(button).push(progress);
 
-        let content: Element<Interaction> = column.into();
-        content.map(Message::Interaction)
+        Element::from(column).map(Message::Interaction)
     }
 }
